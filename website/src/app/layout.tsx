@@ -1,19 +1,30 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Header } from '../components/Header';
 import { Footer } from '../components/Footer';
+import { facts } from '../content/facts.ts';
+import { deviceList, subhead, isListed } from '../content/claims.ts';
 
 export const metadata: Metadata = {
-  title: 'Prompter',
-  description: 'A teleprompter for iPhone, iPad, Mac and Apple Watch. Coming soon.',
+  title: {
+    default: `${facts.name}: a teleprompter for ${deviceList(facts)}`,
+    template: `%s · ${facts.name}`,
+  },
+  description: `${subhead(facts)}${isListed(facts) ? '' : ' Coming soon to the App Store.'}`,
+};
+
+export const viewport: Viewport = {
+  themeColor: '#000000',
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="flex min-h-screen flex-col">
+      <body>
+        <a className="skip" href="#main">Skip to content</a>
         <Header />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-20">{children}</main>
+        <main id="main">{children}</main>
         <Footer />
       </body>
     </html>

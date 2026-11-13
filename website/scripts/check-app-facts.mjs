@@ -30,6 +30,13 @@ export function checkFacts(root = repoRoot, f = facts) {
   if (f.price.pendingStoreKit && sourcesMention(root, sources, /import StoreKit/)) {
     problems.push('facts.price is marked pending StoreKit but the app imports StoreKit; update the flag');
   }
+  // A platform the site names must have its app target in this repo.
+  if (f.platforms.mac && !existsSync(join(root, 'PrompterMac'))) {
+    problems.push('facts.platforms.mac is true but there is no PrompterMac folder');
+  }
+  if (f.platforms.watch && !existsSync(join(root, 'PrompterWatch'))) {
+    problems.push('facts.platforms.watch is true but there is no PrompterWatch folder');
+  }
   return problems;
 }
 
