@@ -61,6 +61,7 @@ test('privacy before launch: no iCloud or purchase sections', () => {
   }
   assert.match(today, /The Prompter app collects no data\./);
   assert.match(today, /useprompter\.app sets no cookies/);
+  assert.match(today, /passes through Namecheap's email forwarding to Google Workspace/);
   const both = withFlags({ storeState: 'live', icloud: true });
   const later = text(both, privacyBlocks(both));
   for (const shown of ['Purchases', 'iCloud key-value', 'Data Not Collected', 'campaign tag']) assert.ok(later.includes(shown), shown);
@@ -87,8 +88,6 @@ test('owner slots that show today are exactly these', () => {
       '[Owner: at REL-22, look at this prompt o',
       '[Owner: confirm the log retention for th',
       '[Owner: how long you keep support emails',
-      '[Owner: forwarding service]',
-      '[Owner: mailbox provider]',
     ],
   );
   assert.deepEqual(slotsIn(facts, rigBlocks()), ['[Owner: a photo of your rig]']);

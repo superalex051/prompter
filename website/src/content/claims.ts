@@ -61,7 +61,7 @@ export function proItems(f: Facts): ListItem[] {
 export function freeItems(f: Facts): ListItem[] {
   return [
     { text: 'Mirroring for glass' },
-    { text: 'Every speed mode: Speed, Finish in and WPM' },
+    { text: 'Every speed mode: Speed, Finish\u00a0in and WPM' },
     { text: 'iCloud sync', soon: !f.icloud },
   ];
 }

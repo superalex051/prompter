@@ -89,8 +89,8 @@ export default function Home() {
               <h3>Present from a Mac</h3>
               <p>Put the script on a second screen and drive it from your MacBook keyboard.</p>
               <div className="s-keys">
-                <p className="s-keys-label" id="mac-keys">Keys</p>
-                <dl aria-labelledby="mac-keys">
+                <p className="s-keys-label">Keys</p>
+                <dl>
                   {MAC_KEYS.map((row) => (
                     <div key={row.action} style={{ display: 'contents' }}>
                       <dt>

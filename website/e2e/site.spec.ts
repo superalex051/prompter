@@ -17,6 +17,9 @@ async function horizontalOverflow(page: Page) {
 
 for (const p of PAGES) {
   test(`${p.path} has the shell, the credit line and no horizontal scroll`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    page.on('pageerror', (e) => errors.push(e.message));
     const res = await page.goto(p.path);
     expect(res?.status()).toBe(200);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(p.h1);
@@ -35,6 +38,8 @@ for (const p of PAGES) {
       [...document.images].filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.src),
     );
     expect(broken).toEqual([]);
+    // No script errors and no hydration mismatches.
+    expect(errors).toEqual([]);
   });
 
   test(`${p.path} has no axe violations`, async ({ page }) => {
@@ -43,6 +48,17 @@ for (const p of PAGES) {
     expect(results.violations).toEqual([]);
   });
 }
+
+test('every page fits a 320 px phone and an 820 px iPad without horizontal scroll', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) > 720, 'checked once per browser, from the phone projects');
+  for (const size of [{ width: 320, height: 640 }, { width: 820, height: 1180 }]) {
+    await page.setViewportSize(size);
+    for (const path of [...PAGES.map((p) => p.path), '/no-such-page/']) {
+      await page.goto(path);
+      expect(await horizontalOverflow(page), `${path} at ${size.width}`).toBeLessThanOrEqual(0);
+    }
+  }
+});
 
 test('unknown path returns a real 404 with the prompter line, no horizontal scroll, axe clean', async ({ page }) => {
   const res = await page.goto('/no-such-page/');

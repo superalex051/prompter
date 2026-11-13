@@ -28,6 +28,7 @@
   --ghost: oklch(100% 0 0 / 0.22);
   --glass: oklch(82% 0.06 225);
   --key-shadow: oklch(0% 0 0 / 0.4);
+  --press: oklch(100% 0 0 / 0.08);
   --slot-bg: oklch(80% 0.165 72 / 0.13);
   --slot-ink: oklch(87% 0.12 78);
   --slot-line: oklch(80% 0.165 72 / 0.55);
@@ -63,6 +64,7 @@ a { color: var(--amber); text-decoration: none; }
 a:hover { color: var(--amber-hover); }
 :focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
 h1, h2, h3 { text-wrap: balance; overflow-wrap: anywhere; min-width: 0; }
+p, li, dd { text-wrap: pretty; }
 [id] { scroll-margin-top: calc(var(--header-h) + 16px); }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -125,6 +127,7 @@ h1, h2, h3 { text-wrap: balance; overflow-wrap: anywhere; min-width: 0; }
   transition: background-color 160ms var(--ease-out), border-color 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 .s-btn:hover { border-color: var(--ink-2); }
+.s-btn:active { background: var(--press); }
 .s-btn[aria-pressed="true"] { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); }
 .s-btn svg { width: 13px; height: 13px; flex: none; }
 
@@ -292,6 +295,7 @@ kbd {
   .s-page { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "toc" "doc"; row-gap: 28px; }
   .s-toc { position: static; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 14px 0; }
   .s-toc ol { flex-direction: row; flex-wrap: wrap; gap: 2px 18px; }
+  .s-doc > h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 }
 .s-doc-head h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(40px, 5vw, 60px); letter-spacing: -0.02em; line-height: 1.05; margin: 0; }
 .s-dek { font-size: 19px; line-height: 1.45; color: var(--ink-2); margin: 14px 0 0; max-width: 40ch; }
@@ -343,7 +347,7 @@ kbd {
 /* 404 */
 .s-404 { padding: clamp(80px, 12vw, 160px) 20px clamp(96px, 12vw, 160px); text-align: center; }
 .s-404-line { position: relative; display: inline-block; padding: 0 clamp(34px, 4vw, 56px); }
-.s-404-line h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(40px, 6.4vw, 84px); line-height: 1.1; letter-spacing: -0.02em; margin: 0; max-width: 13ch; }
+.s-404-line h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(40px, 6.4vw, 84px); line-height: 1.1; letter-spacing: -0.02em; margin: 0; text-wrap: wrap; }
 .s-404-line svg { position: absolute; top: 0.55em; width: clamp(14px, 1.4vw, 20px); height: clamp(18px, 1.75vw, 25px); fill: var(--amber); font-size: clamp(40px, 6.4vw, 84px); }
 .s-404-line svg.l { left: 0; }
 .s-404-line svg.r { right: 0; }

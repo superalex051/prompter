@@ -22,7 +22,7 @@ export function RigDiagram() {
         <text className="d-label" x="660" y="264" textAnchor="middle">films through the glass</text>
         <text className="d-label" x="268" y="66" textAnchor="end">Glass at 45°</text>
         <text className="d-label" x="400" y="366" textAnchor="middle">iPhone, screen up, in landscape</text>
-        <text className="d-label" x="248" y="144" textAnchor="middle">You read the reflection</text>
+        <text className="d-label" x="236" y="144" textAnchor="middle">You read the reflection</text>
       </svg>
       <svg className="d-narrow" viewBox="0 0 360 300" aria-hidden="true">
         <line className="d-base" x1="120" y1="246" x2="300" y2="246" />

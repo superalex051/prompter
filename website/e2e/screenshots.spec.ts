@@ -16,7 +16,27 @@ const PAGES = [
 
 test.skip(!process.env.SHOTS, 'screenshots run only with SHOTS=1');
 
+// The two in-between widths (smallest phone, iPad portrait), from the Chromium desktop project only.
+const EXTRA = [
+  { width: 320, height: 640 },
+  { width: 820, height: 1180 },
+];
+
 for (const p of PAGES) {
+  test(`screenshot ${p.name} at 320 and 820`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'chromium-1440', 'extra widths come from one project');
+    for (const size of EXTRA) {
+      await page.setViewportSize(size);
+      await page.goto(p.path);
+      await page.waitForLoadState('load');
+      await page.screenshot({
+        path: join(out, `${p.name}-chromium-${size.width}.png`),
+        fullPage: true,
+        animations: 'disabled',
+      });
+    }
+  });
+
   test(`screenshot ${p.name}`, async ({ page }, info) => {
     await page.goto(p.path);
     await page.evaluate(() => document.fonts.ready);

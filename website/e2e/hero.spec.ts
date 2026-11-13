@@ -12,12 +12,19 @@ async function rollState(page: Page) {
   });
 }
 
-async function transformAfter(page: Page, ms: number) {
-  const a = (await rollState(page)).transform;
+// Vertical offset of the rolling text, in px (from the computed transform matrix).
+const offsetY = (transform: string) => (transform === 'none' ? 0 : Number(transform.split(',')[5]?.replace(')', '')));
+
+// How far the text moves in `ms`. Running, it rolls about 25 to 70 px a second, depending on width.
+async function movedIn(page: Page, ms: number) {
+  const a = offsetY((await rollState(page)).transform);
   await page.waitForTimeout(ms);
-  const b = (await rollState(page)).transform;
-  return { a, b };
+  const b = offsetY((await rollState(page)).transform);
+  return Math.abs(b - a);
 }
+
+// After a pause, Chromium can move a compositor animation by a frame while it syncs; let that settle.
+const settle = (page: Page) => page.waitForTimeout(300);
 
 test('the text rolls, and Pause stops it and the clock; Play starts it again', async ({ page }) => {
   await page.goto('/');
@@ -26,15 +33,14 @@ test('the text rolls, and Pause stops it and the clock; Play starts it again', a
   const pause = hero.getByRole('button', { name: 'Pause' });
   await expect(pause).toBeVisible();
 
-  const moving = await transformAfter(page, 700);
-  expect(moving.a).not.toBe(moving.b);
+  expect(await movedIn(page, 700)).toBeGreaterThan(5);
   expect((await rollState(page)).play).toBe('running');
 
   await pause.click();
   await expect(hero.getByRole('button', { name: 'Play' })).toBeVisible();
   expect((await rollState(page)).play).toBe('paused');
-  const still = await transformAfter(page, 700);
-  expect(still.a).toBe(still.b);
+  await settle(page);
+  expect(await movedIn(page, 700)).toBeLessThan(1);
   await expect(page.getByTestId('hero-screen').locator('.pword')).toHaveText('Paused');
   const clock = page.getByTestId('hero-screen').locator('.ptime');
   const before = await clock.textContent();
@@ -44,8 +50,7 @@ test('the text rolls, and Pause stops it and the clock; Play starts it again', a
   await hero.getByRole('button', { name: 'Play' }).click();
   await expect(hero.getByRole('button', { name: 'Pause' })).toBeVisible();
   expect((await rollState(page)).play).toBe('running');
-  const again = await transformAfter(page, 700);
-  expect(again.a).not.toBe(again.b);
+  expect(await movedIn(page, 700)).toBeGreaterThan(5);
 });
 
 test('Mirror it flips the screen only, and says so as a toggle', async ({ page }) => {
@@ -87,13 +92,12 @@ test.describe('with Reduce Motion on', () => {
     await hero.scrollIntoViewIfNeeded();
     await expect(hero.getByRole('button', { name: 'Play' })).toBeVisible();
     expect((await rollState(page)).play).toBe('paused');
-    const still = await transformAfter(page, 700);
-    expect(still.a).toBe(still.b);
+    await settle(page);
+    expect(await movedIn(page, 700)).toBeLessThan(1);
 
     await hero.getByRole('button', { name: 'Play' }).click();
     await expect(hero.getByRole('button', { name: 'Pause' })).toBeVisible();
     expect((await rollState(page)).play).toBe('running');
-    const moving = await transformAfter(page, 700);
-    expect(moving.a).not.toBe(moving.b);
+    expect(await movedIn(page, 700)).toBeGreaterThan(5);
   });
 });

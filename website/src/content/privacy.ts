@@ -210,7 +210,7 @@ export function privacyBlocks(f: Facts = siteFacts): Block[] {
           text: 'If you email us, we get your email address and what you write. We use them only to answer you, and we delete them [Owner: how long you keep support emails].',
         },
         {
-          text: 'Email to that address passes through [Owner: forwarding service] to [Owner: mailbox provider], and their privacy policies apply.',
+          text: "Email to that address passes through Namecheap's email forwarding to Google Workspace, and their privacy policies apply.",
         },
         { text: "GitHub Issues are public and run by GitHub. GitHub's privacy statement applies there." },
       ],

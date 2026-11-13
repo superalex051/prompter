@@ -13,7 +13,10 @@ export default function NotFound() {
         <svg className="l" viewBox="0 0 16 20" aria-hidden="true">
           <path d="M0 0L16 10L0 20Z" />
         </svg>
-        <h1>This page isn&apos;t in the script.</h1>
+        <h1>
+          This page isn&apos;t <br />
+          in the script.
+        </h1>
         <svg className="r" viewBox="0 0 16 20" aria-hidden="true">
           <path d="M16 0L0 10L16 20Z" />
         </svg>
