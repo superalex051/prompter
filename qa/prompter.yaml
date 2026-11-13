@@ -1,0 +1,134 @@
+# Prompter: open straight into the prompter, count down, play, pause, drag, long-press for settings, close.
+#
+# The prompter locks the app to landscape on a portrait-sized simulator. After that, Maestro reports every element's bounds
+# in LANDSCAPE points (the screen is 874 x 402) but sends taps in PORTRAIT points (402 x 874), so `tapOn: {id: ...}` and
+# `tapOn: 'Done'` land in the wrong place. Every tap below that is not the exact middle of the screen is therefore a point
+# worked out by hand: landscape (x, y) is portrait (402 - y, x), i.e. `point: "<402-y>, <x>"` (iPhone 17 Pro). The middle
+# of the screen is the same point both ways, so `50%,50%` is fine. Swipes use the same rule. See qa/README.md ("Landscape").
+# Screenshots from inside the prompter come out rotated a quarter turn for the same reason (README says how to turn them).
+appId: ${APP_ID}
+name: Prompter
+---
+# -demoData opens "Channel intro: rig tour" (the newest demo script, 165 words = 1:11 at the default 140 wpm) and uses a
+# throwaway settings suite, so the countdown is the default 5 s whatever an earlier run left behind. No -autoStart: the flow
+# starts it with a tap.
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: prompter
+
+# Ready: the HUD (one element, mirrored with the text) says the state, the time left and the speed. The close button is
+# showing because nothing is moving.
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Ready, 1:11 left, 140 wpm'
+    timeout: 20000
+- assertVisible:
+    id: prompter.canvas
+- assertVisible:
+    id: prompter.close
+- takeScreenshot: prompter-ready
+
+# Tap the text: the countdown starts. Two elements carry it, the big digit and the HUD.
+- tapOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: prompter.countdown
+      text: 'Starting in \d+'
+    timeout: 5000
+- assertVisible:
+    id: prompter.hud
+    text: 'Starting in \d+, 1:11 left, 140 wpm'
+- takeScreenshot: prompter-countdown
+
+# 5 s later the text is playing and the digit is gone. The close button fades out while the text moves (it shows for 3 s
+# after a touch, and the tap that started the countdown was 5 s ago); it leaves the accessibility tree too, so VoiceOver
+# can't land on an invisible control.
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Playing, .*'
+    timeout: 10000
+- assertNotVisible:
+    id: prompter.countdown
+- extendedWaitUntil:
+    notVisible:
+      id: prompter.close
+    timeout: 3000
+- takeScreenshot: prompter-playing
+
+# Tap again: paused, and the close button is back.
+- tapOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Paused, .*'
+    timeout: 5000
+- assertVisible:
+    id: prompter.close
+- takeScreenshot: prompter-paused
+
+# A short drag scrubs the text. Dragging up in landscape (finger moves from y=350 to y=100) is dragging from x=52 to x=302
+# in portrait points. Holding still for 0.5 s opens settings, so the swipe is kept quick (200 ms). The time left must
+# change, and the prompter must stay paused with no settings open.
+- copyTextFrom:
+    id: prompter.hud
+- evalScript: ${output.hudBeforeDrag = maestro.copiedText}
+- swipe:
+    start: '52,437'
+    end: '302,437'
+    duration: 200
+- waitForAnimationToEnd
+- assertVisible:
+    id: prompter.hud
+    text: 'Paused, .*'
+- copyTextFrom:
+    id: prompter.hud
+- assertTrue: ${maestro.copiedText != output.hudBeforeDrag}
+- assertNotVisible: 'Settings'
+- takeScreenshot: prompter-dragged
+
+# Long-press opens the settings, in a popover over the right of the screen in landscape (a sheet would hide the text), and
+# Done closes it. Done is at landscape (759, 66) -> portrait point (336, 759); the popover is anchored at a fixed spot, so
+# the point does not move. While it is open the text behind it is still the live prompter.
+- longPressOn:
+    point: '50%,50%'
+# The popover lies entirely below Maestro's idea of the screen here (874 x 402, see "Landscape" in the README), so it is not
+# in the hierarchy it sees. Opening it does take the HUD out of the hierarchy, which is what is waited for.
+- extendedWaitUntil:
+    notVisible:
+      id: prompter.hud
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: prompter-settings
+- tapOn:
+    point: '336,759'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+    timeout: 5000
+- assertVisible:
+    id: prompter.hud
+    text: 'Paused, .*'
+
+# Close (the x at the top left in landscape, centre landscape (96, 34) -> portrait point (368, 96)). The library comes
+# back and the app turns portrait again.
+- tapOn:
+    point: '368,96'
+# Back in portrait, but Maestro keeps treating the screen as the 874 x 402 landscape one for the rest of the flow: nothing
+# below y=402 is ever reported as visible, not even after 30 s (a fresh `maestro hierarchy` sees everything). So only the top two
+# rows and the title are asserted; the screenshot shows all four.
+- extendedWaitUntil:
+    visible: 'Scripts'
+    timeout: 10000
+- extendedWaitUntil:
+    visible: 'Prompt Client testimonial ask'
+    timeout: 5000
+- assertVisible: 'Prompt Channel intro: rig tour'
+- assertNotVisible:
+    id: prompter.canvas
+- takeScreenshot: prompter-closed-library

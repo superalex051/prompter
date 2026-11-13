@@ -1,0 +1,93 @@
+# Library: the four demo rows, the + menu, a new script that is abandoned, swipe-delete with Undo, Duplicate.
+appId: ${APP_ID}
+name: Library
+---
+# clearState wipes Settings (UserDefaults) from an earlier run; -demoData gives a throwaway library in the temp folder, so
+# The owner's real scripts are never read or written. The dashes are written out on purpose: Maestro adds one to a key itself,
+# except when the value is a YAML boolean, so `demoData: true` would reach the app as a bare "demoData" (see README).
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: library
+
+# The four demo scripts, newest edit first, each with its own amber Prompt button. A row is two elements: the details
+# (title, first line, stats) and the button, labelled "Prompt <title>".
+- extendedWaitUntil:
+    visible: 'Scripts'
+    timeout: 20000
+- assertVisible: 'Channel intro: rig tour'
+- assertVisible: 'Client testimonial ask'
+- assertVisible: 'Product review: camera'
+- assertVisible: 'Welcome to Prompter'
+- assertVisible: 'Prompt Channel intro: rig tour'
+- assertVisible: 'Prompt Client testimonial ask'
+- assertVisible: 'Prompt Product review: camera'
+- assertVisible: 'Prompt Welcome to Prompter'
+# Stats line under each title: words, read time at 140 wpm (the default), when it was edited.
+- assertVisible: '165 words · 1:11 · .*'
+- assertNotVisible: 'Untitled'
+- takeScreenshot: library-top
+
+# The + menu offers three ways to add a script. Nothing here is tapped except New script: Paste would raise iOS's
+# "Allow Paste" prompt and Import opens the Files picker.
+- tapOn: 'Add script'
+- assertVisible: 'New script'
+- assertVisible: 'Paste as new script'
+- assertVisible: 'Import file…'
+- takeScreenshot: library-add-menu
+
+# New script opens a blank editor. Leaving it untouched must not leave an "Untitled" row behind.
+- tapOn: 'New script'
+- assertVisible: 'Start typing your script…'
+- assertVisible: '0 words · 0:00 at 140 wpm'
+- takeScreenshot: library-new-script-editor
+- tapOn: 'Scripts'   # the back button carries the title of the screen it returns to
+- extendedWaitUntil:
+    visible: 'Prompt Welcome to Prompter'
+    timeout: 10000
+- assertNotVisible: 'Untitled'
+- assertVisible: 'Channel intro: rig tour'
+- takeScreenshot: library-after-new-script
+
+# Swipe to delete, then Undo. The banner stays for six seconds, so the screenshot and the Undo tap come straight after.
+- swipe:
+    from:
+      text: 'Client testimonial ask'
+    direction: LEFT
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    visible: 'Deleted .*Client testimonial ask.*'
+    timeout: 5000
+- assertNotVisible: 'Client testimonial ask'
+- takeScreenshot: library-deleted-banner
+- tapOn: 'Undo'
+- extendedWaitUntil:
+    visible: 'Client testimonial ask'
+    timeout: 5000
+- assertNotVisible: 'Deleted .*'
+- assertVisible: 'Prompt Client testimonial ask'
+- takeScreenshot: library-undo-restored
+
+# Context menu: Duplicate adds "<title> copy".
+- longPressOn: 'Product review: camera'
+- assertVisible: 'Duplicate'
+- assertVisible: 'Rename'
+- takeScreenshot: library-context-menu
+- tapOn: 'Duplicate'
+- extendedWaitUntil:
+    visible: 'Product review: camera copy'
+    timeout: 5000
+# The source row stays grey while the context menu finishes closing; wait it out, or the shot looks like a stuck selection.
+- waitForAnimationToEnd
+- takeScreenshot: library-duplicated
+
+# Clean up: the copy goes again through the same menu, so the library ends as it began (four demo rows; the demo
+# library itself is thrown away on the next launch anyway).
+- longPressOn: 'Product review: camera copy'
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    notVisible: 'Product review: camera copy'
+    timeout: 5000
+- assertVisible: 'Product review: camera'
+- assertVisible: 'Welcome to Prompter'

@@ -1,0 +1,24 @@
+# Release build: every debug launch flag is ignored. Run with CONFIG=Release scripts/qa.sh (it picks this folder by itself).
+# The flags below would, in a Debug build, swap the library for demo data and open Settings. In a shipping build the app
+# opens its own library (a fresh install holds only the welcome script) and goes nowhere special.
+# The dashes are written out on purpose, as in the other flows (see qa/README.md).
+appId: ${APP_ID}
+name: Release ignores flags
+---
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: settings
+      -syncDemo: "true"
+- extendedWaitUntil:
+    visible: 'Scripts'
+    timeout: 20000
+# Only the real library: the welcome script, none of the demo scripts.
+- assertVisible: 'Welcome to Prompter'
+- assertNotVisible: 'Channel intro: rig tour'
+- assertNotVisible: 'Client testimonial ask'
+- assertNotVisible: 'Product review: camera'
+# -route settings was ignored too: the library is showing, not Settings.
+- assertNotVisible: 'Done'
+- takeScreenshot: release-library

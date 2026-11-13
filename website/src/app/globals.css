@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+:root {
+  --paper: oklch(0% 0 0);
+  --tile: oklch(20% 0.003 286);
+  --ink: oklch(98% 0 0);
+  --muted: oklch(72% 0.003 286);
+  --hair: oklch(27% 0.003 286);
+  --amber: oklch(80% 0.165 72);
+  --amber-hover: oklch(86% 0.13 78);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-tile: var(--tile);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-hair: var(--hair);
+  --color-amber: var(--amber);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+}
+
+html { color-scheme: dark; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: anywhere;
+}
+a:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }

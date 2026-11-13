@@ -1,0 +1,176 @@
+# Settings (the gear in the library): change the countdown and the scroll mode, look at every section, check the sample
+# script row, close it, reopen it to see the changes were kept, then reset everything.
+appId: ${APP_ID}
+name: Settings
+---
+# Settings live in UserDefaults, which -demoData does not isolate, so clearState starts from the defaults and the flow
+# resets them again at the end. Dashes are written out on purpose, see README ("Launch arguments").
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: library
+
+- extendedWaitUntil:
+    visible: 'Scripts'
+    timeout: 20000
+# Remote for Mac (M9) only shows once a Mac is paired: not in the library's toolbar here.
+- assertNotVisible: 'Remote for Mac'
+- tapOn: 'Settings'   # the gear
+- extendedWaitUntil:
+    visible: 'Scrolling'   # the first section's header
+    timeout: 10000
+
+# Defaults: WPM mode, 5 s countdown. A selected segment reports selected=true; the unselected ones do not.
+- assertVisible:
+    text: 'WPM'
+    selected: true
+- assertVisible:
+    text: '5 s'
+    selected: true
+- takeScreenshot: settings-defaults
+
+# Scroll mode to Speed. The Words per minute slider gives way to a Speed slider and the footer under it changes with the mode.
+- tapOn: 'Speed'
+- assertVisible:
+    text: 'Speed'
+    selected: true
+- assertVisible: 'A steady scroll\..*'
+- assertNotVisible: 'Words per minute.*'
+# Countdown to 10 s.
+- tapOn: '10 s'
+- assertVisible:
+    text: '10 s'
+    selected: true
+- assertNotVisible:
+    text: '5 s'
+    selected: true
+- assertVisible: 'Text'   # the third section's header, with its Size slider just under it
+- assertVisible: 'Size.*'
+- takeScreenshot: settings-scrolling-countdown
+
+# The rest of the form, one section at a time. scrollUntilVisible with centerElement only scrolls when the element is not
+# already fully on screen, so each target below is one that starts off screen (the color tile is cut off by the sheet's
+# bottom edge) and ends up in the middle.
+- scrollUntilVisible:
+    element: 'White on black'
+    direction: DOWN
+    centerElement: true
+- assertVisible: 'Weight.*'
+- assertVisible: 'Line spacing.*'
+- assertVisible: 'Side margins.*'
+- assertVisible: 'Colors'
+- takeScreenshot: settings-text
+- scrollUntilVisible:
+    element: 'Mirror and rotation'
+    direction: DOWN
+    centerElement: true
+- assertVisible: 'Mirror \(for the glass\).*'
+- assertVisible: 'Rotation'
+# The footer under the section is below the sheet's edge at first; scroll it into view.
+- scrollUntilVisible:
+    element: 'Mirror flips the text left to right.*set Rotation to 180°\.'
+    direction: DOWN
+- takeScreenshot: settings-mirror
+- scrollUntilVisible:
+    element: 'Reading line'
+    direction: DOWN
+    centerElement: true
+- assertVisible: 'Position from top.*'
+- assertVisible: 'Dim text above.*'
+- takeScreenshot: settings-reading-line
+
+# The Controls section pushes a plain-words guide: touch, keyboard, Apple Watch, notes and pauses. Back returns to the form.
+- scrollUntilVisible:
+    element: 'How to use'
+    direction: DOWN
+    centerElement: true
+- assertVisible: 'Controls'
+- takeScreenshot: settings-controls-row
+- tapOn: 'How to use'
+- extendedWaitUntil:
+    visible: 'On the screen'
+    timeout: 5000
+- assertVisible: 'Tap.*'
+- assertVisible: 'Space or Return.*'
+- scrollUntilVisible:
+    element: 'Digital Crown.*'
+    direction: DOWN
+- scrollUntilVisible:
+    element: '\[pause 2\].*'
+    direction: DOWN
+- takeScreenshot: settings-controls-guide
+- tapOn: 'Settings'   # the back button's label
+- extendedWaitUntil:
+    visible: 'How to use'
+    timeout: 5000
+
+# Sync with Mac (M7): the row says Not paired until a Mac is paired. The page isn't opened here: it looks for Macs over Bonjour,
+# which needs the Local Network permission (scripts/sync-e2e.sh covers sync itself).
+- scrollUntilVisible:
+    element: 'Sync with Mac.*'
+    direction: DOWN
+    centerElement: true
+- assertVisible: 'Sync with Mac.*'
+- assertVisible: 'Not paired'
+- assertNotVisible: 'Remote for Mac'   # lives on the Sync with Mac page, once paired
+- takeScreenshot: settings-sync-row
+
+# The demo library already holds "Welcome to Prompter", so the restore button is greyed out and the footer says so.
+- scrollUntilVisible:
+    element: 'Sample script'
+    direction: DOWN
+    centerElement: true
+- assertVisible:
+    text: 'Restore sample script'
+    enabled: false
+- assertVisible: 'Already in your library\.'
+- takeScreenshot: settings-sample-script
+
+# Done closes the sheet and the library is back underneath.
+- tapOn: 'Done'
+- extendedWaitUntil:
+    visible: 'Scripts'
+    timeout: 10000
+- assertVisible: 'Prompt Welcome to Prompter'
+
+# Reopen: both changes were kept.
+- tapOn: 'Settings'
+- extendedWaitUntil:
+    visible: 'Scrolling'
+    timeout: 10000
+- assertVisible:
+    text: 'Speed'
+    selected: true
+- assertVisible:
+    text: '10 s'
+    selected: true
+- takeScreenshot: settings-reopened
+
+# Put everything back. The list button and the confirmation dialog's button both read "Reset all settings".
+- scrollUntilVisible:
+    element: 'Reset all settings'
+    direction: DOWN
+    centerElement: true
+- takeScreenshot: settings-reset-section
+- tapOn: 'Reset all settings'
+- assertVisible: 'Reset all settings\?'
+- takeScreenshot: settings-reset-confirm
+# While the dialog is up the form behind it is hidden from the accessibility tree, so this finds the dialog's button only.
+- tapOn: 'Reset all settings'
+- assertNotVisible: 'Reset all settings\?'
+- scrollUntilVisible:
+    element: 'Scrolling'
+    direction: UP
+    timeout: 30000
+- assertVisible:
+    text: 'WPM'
+    selected: true
+- assertVisible:
+    text: '5 s'
+    selected: true
+- takeScreenshot: settings-after-reset
+- tapOn: 'Done'
+- extendedWaitUntil:
+    visible: 'Scripts'
+    timeout: 10000

@@ -1,0 +1,6 @@
+// Copy this file to Config/Local.xcconfig (it's git-ignored), fill in your values, then run `xcodegen generate`.
+
+// Xcode → Settings → Accounts → select your Apple ID → your team. The 10-character Team ID.
+DEVELOPMENT_TEAM = ABCDE12345
+// Anything unique to you, reversed-domain style. Becomes com.yourname.prompter and com.yourname.prompter.watchkitapp.
+BUNDLE_ID_PREFIX = com.yourname

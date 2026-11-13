@@ -1,0 +1,260 @@
+# Shoot-day journey, one cold run on the iPhone 17 Pro: write a script, prompt it, change the settings from inside the
+# prompter, ride out a [pause 2] hold, close, then delete the script and bring it back with Undo. The library ends as it began.
+#
+#   library > + > New script > title and a two-paragraph body (a // note and a [pause 2] cue) > back > the row says
+#   58 words (the note and the cue are not words) > Prompt > countdown > playing > tap to pause > long-press settings >
+#   Speed mode and a 3 s countdown > Done > tap to resume > the hold > pause > close > library > swipe-delete > Undo > delete again
+#
+# THE LANDSCAPE CATCH, and why this flow differs from prompter.yaml (see README, "Landscape"): Maestro reads the screen size
+# once, the first time it needs it, and keeps it for the rest of the run. prompter.yaml launches straight into the
+# prompter, so Maestro thinks the screen is 874 x 402; this flow starts in the portrait library, so Maestro thinks it is
+# 402 x 874. Consequences here:
+#   - The library and editor are fully visible, also after the prompter closes (prompter.yaml can't see the lower rows).
+#   - The settings popover sits at landscape x 412..812, entirely right of x=402, so it is NOT in the hierarchy Maestro
+#     sees: no assertion or tap by text works inside it. It is driven by hand-converted points, and checked by its
+#     effects: the HUD says "Speed 3.0", and the library's Settings sheet shows Speed and 3 s afterwards.
+#   - Taps convert a landscape point (x, y) to the portrait point "<402 - y>, <x>". The popover's content is laid out
+#     like this (landscape): mode segments at y=170 (Speed x=486), the Countdown row at y=264 after one scroll (3 s
+#     x=544), Done at (759, 66). A drag up inside the popover (landscape (600,300) to (600,150)) is `102,600` to `252,600`
+#     and scrolls the form; it must be slow (800 ms) and start inside the popover, or it dismisses it.
+appId: ${APP_ID}
+name: Journey
+---
+# clearState: settings from the defaults (WPM, 5 s countdown). -demoData: a throwaway library, never real scripts.
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: library
+
+# --- Library -> + -> New script ---
+- extendedWaitUntil:
+    visible: 'Prompt Welcome to Prompter'
+    timeout: 20000
+- assertVisible: 'Channel intro: rig tour'
+- assertVisible: 'Client testimonial ask'
+- assertVisible: 'Product review: camera'
+- assertNotVisible: 'Shoot day test'
+- takeScreenshot: journey-01-library
+- tapOn: 'Add script'
+- assertVisible: 'New script'
+- takeScreenshot: journey-02-add-menu
+- tapOn: 'New script'
+- assertVisible: 'Start typing your script…'
+- assertVisible: '0 words · 0:00 at 140 wpm'
+# No words yet: Prompt is disabled, and the tip under the word count explains notes and pauses (and Markdown).
+- assertVisible:
+    text: 'Prompt'
+    enabled: false
+- assertVisible: 'Tip: start a line with // for a note, or write \[pause 2\] to hold\. Markdown works too: \*\*bold\*\* shows in amber, # starts a heading\.'
+# A new script focuses its body by itself after 0.45 s (Done appears in the navigation bar once something has focus).
+# Wait for that before touching the title, or the late autofocus takes the cursor back from it.
+- extendedWaitUntil:
+    visible: 'Done'
+    timeout: 5000
+- takeScreenshot: journey-03-editor-blank
+
+# --- Title, then the body ---
+# Return in the title field moves to the body. The body is two paragraphs with a note and a pause cue between them:
+# 34 + 24 = 58 words; the note (8 words) and the cue (2) must not be counted. Read time = 58 / 140 min + the 2 s hold = 0:27.
+- tapOn: 'Title'
+- inputText: 'Shoot day test'
+- pressKey: Enter
+- inputText: "Welcome back to the channel. This is the shoot day test: I am walking through the whole routine, from the library to the glass, so I know it all works before the real take.\n\n// Look at the lens and slow down here.\n[pause 2]\nSecond paragraph: the take starts after the countdown, and I can pause it, change the speed and carry on without touching the phone again."
+- assertVisible: '58 words · 0:27 at 140 wpm'
+- assertNotVisible: '68 words · .*'
+- assertNotVisible: 'Tip: start a line with.*'   # the script has a note and a pause now, so the tip is gone
+- assertVisible:
+    text: 'Prompt'
+    enabled: true
+- takeScreenshot: journey-04-editor-typed
+
+# --- Back: the row ---
+- tapOn: 'Scripts'
+- extendedWaitUntil:
+    visible: 'Prompt Shoot day test'
+    timeout: 10000
+- assertVisible: 'Shoot day test'
+- assertVisible: '58 words · 0:27 · .*'
+- assertNotVisible: '68 words · .*'
+- assertNotVisible: 'Untitled'
+- takeScreenshot: journey-05-library-new-row
+
+# --- Prompt: ready, countdown, playing ---
+# The prompter's time left is longer than the library's 0:27: WPM paces the spoken lines only, so the note and the cue
+# line scroll past in time of their own (about 3 s at the default text size on the iPhone 17 Pro), and the HUD counts it.
+- tapOn: 'Prompt Shoot day test'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Ready, 0:30 left, 140 wpm'
+    timeout: 20000
+- assertVisible:
+    id: prompter.close
+- takeScreenshot: journey-06-prompter-ready
+- tapOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: prompter.countdown
+      text: 'Starting in \d+'
+    timeout: 5000
+- takeScreenshot: journey-07-countdown
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Playing, .*, 140 wpm'
+    timeout: 10000
+- assertNotVisible:
+    id: prompter.countdown
+- takeScreenshot: journey-08-playing
+
+# --- Tap to pause ---
+# The 34-word first paragraph takes about 15 s at 140 wpm to reach the [pause 2] line, and this gets there in a few
+# seconds, so the cue has not held yet (a hold that a pause cuts short does not hold again).
+- tapOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Paused, .*, 140 wpm'
+    timeout: 5000
+- assertVisible:
+    id: prompter.close
+- takeScreenshot: journey-09-paused
+
+# --- Long-press: settings popover; Speed mode, 3 s countdown ---
+# The popover is invisible to Maestro here (see the top of this file). Opening it does take the HUD out of the hierarchy,
+# which is what is waited for; the animation wait lets the popover finish before the first tap.
+- longPressOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    notVisible:
+      id: prompter.hud
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: journey-10-settings-open
+# Mode: Speed (landscape (486, 170)).
+- tapOn:
+    point: '232,486'
+# Scroll the form so the Countdown row is on screen, then 3 s (landscape (544, 264)).
+- swipe:
+    start: '102,600'
+    end: '252,600'
+    duration: 800
+- waitForAnimationToEnd
+- tapOn:
+    point: '138,544'
+- waitForAnimationToEnd
+- takeScreenshot: journey-11-settings-speed-3s
+# Done (landscape (759, 66)). The HUD is back, and it already says Speed: the change was applied live.
+- tapOn:
+    point: '336,759'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Paused, .*, Speed 3\.0'
+    timeout: 10000
+
+# --- Tap to resume: speed mode scrolls on to the [pause 2] line and holds there ---
+# Resuming from a pause does not count down again, so the 3 s countdown is only seen by the next start (checked below).
+- tapOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Playing, .*, Speed 3\.0'
+    timeout: 5000
+- assertNotVisible:
+    id: prompter.countdown
+- takeScreenshot: journey-12-playing-speed
+# The HUD's state word turns into "Pause 2" while the cue holds the text, so the label changes from "Playing" to "Pause".
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Pause \d, .*, Speed 3\.0'
+    timeout: 40000
+- takeScreenshot: journey-13-hold
+- tapOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Paused, .*, Speed 3\.0'
+    timeout: 5000
+- takeScreenshot: journey-14-paused-after-hold
+
+# --- Close: the close button at landscape (96, 34) is the portrait point 368,96. The library is portrait again. ---
+- tapOn:
+    point: '368,96'
+- extendedWaitUntil:
+    visible: 'Prompt Shoot day test'
+    timeout: 10000
+- assertNotVisible:
+    id: prompter.canvas
+- assertVisible: 'Prompt Welcome to Prompter'   # the last row: visible, because this run's screen is the portrait one
+- takeScreenshot: journey-15-library-after-close
+
+# --- What the popover did is checked in the app settings: Speed and a 3 s countdown were kept. Then put back. ---
+- tapOn: 'Settings'
+- extendedWaitUntil:
+    visible: 'Scrolling'
+    timeout: 10000
+- assertVisible:
+    text: 'Speed'
+    selected: true
+- assertVisible:
+    text: '3 s'
+    selected: true
+- takeScreenshot: journey-16-settings-kept
+- tapOn: 'WPM'
+- tapOn: '5 s'
+- assertVisible:
+    text: 'WPM'
+    selected: true
+- assertVisible:
+    text: '5 s'
+    selected: true
+- tapOn: 'Done'
+- extendedWaitUntil:
+    visible: 'Prompt Shoot day test'
+    timeout: 10000
+
+# --- Swipe-delete, Undo, delete again. Screenshots straight after each action: the banner is up for 6 s. ---
+- swipe:
+    from:
+      text: 'Shoot day test'
+    direction: LEFT
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    visible: 'Deleted .*Shoot day test.*'
+    timeout: 5000
+- assertNotVisible: 'Prompt Shoot day test'
+- takeScreenshot: journey-17-deleted-banner
+- tapOn: 'Undo'
+- extendedWaitUntil:
+    visible: 'Prompt Shoot day test'
+    timeout: 5000
+- assertNotVisible: 'Deleted .*'
+- assertVisible: '58 words · 0:27 · .*'   # the same script came back, not a copy
+- takeScreenshot: journey-18-undo-restored
+- swipe:
+    from:
+      text: 'Shoot day test'
+    direction: LEFT
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    visible: 'Deleted .*Shoot day test.*'
+    timeout: 5000
+- assertNotVisible: 'Prompt Shoot day test'
+# Let the banner go: the library is then what it was at the start.
+- extendedWaitUntil:
+    notVisible: 'Deleted .*'
+    timeout: 10000
+- assertVisible: 'Prompt Channel intro: rig tour'
+- assertVisible: 'Prompt Client testimonial ask'
+- assertVisible: 'Prompt Product review: camera'
+- assertVisible: 'Prompt Welcome to Prompter'
+- assertNotVisible: 'Shoot day test'
+- assertNotVisible: 'Untitled'
+- takeScreenshot: journey-19-library-final

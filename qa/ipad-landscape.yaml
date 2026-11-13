@@ -1,0 +1,67 @@
+# iPad in landscape: the split view with a script open, the empty detail, the prompter, and the prompter's settings.
+# iPad only (see ipad-library.yaml); run it with  SIM_UDID=<iPad UDID> scripts/qa.sh ipad-landscape
+# Nothing is tapped here: Maestro's taps are in portrait points, so this flow only looks. It turns the simulator back
+# to portrait at the end, because the simulator keeps its orientation between runs and the other flows assume portrait.
+# The screenshots are portrait frames with the picture turned a quarter turn; `sips -r 270 shot.png --out upright.png`.
+appId: ${APP_ID}
+name: iPad landscape
+---
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: editor
+- extendedWaitUntil:
+    visible: '165 words · 1:11 at 140 wpm'
+    timeout: 20000
+- setOrientation: LANDSCAPE_LEFT
+- waitForAnimationToEnd
+# Both columns side by side: the list, and the newest script's editor.
+- assertVisible: 'Prompt Welcome to Prompter'
+- assertVisible: 'Prompt Channel intro: rig tour'
+- assertNotVisible: 'Pick a script or make a new one'
+- takeScreenshot: ipad-landscape-library
+
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: library
+- extendedWaitUntil:
+    visible: 'Pick a script or make a new one'
+    timeout: 20000
+- takeScreenshot: ipad-landscape-empty-detail
+
+# The prompter with the countdown running down on its own; the screenshot is taken once the text moves.
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: prompter
+      -autoStart: "true"
+- extendedWaitUntil:
+    visible: 'Playing, .*'
+    timeout: 20000
+- extendedWaitUntil:
+    notVisible:
+      id: 'prompter.countdown'
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: ipad-landscape-prompter
+
+# The settings that open on a long press in the prompter. The sheet is not in the accessibility tree Maestro reads (not
+# in `maestro hierarchy` either), so there is nothing to assert or wait for: the optional wait below is a plain pause
+# while the sheet slides up, and the screenshot is the check.
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: prompterSettings
+- extendedWaitUntil:
+    visible: 'The sheet has no accessibility text, so this just waits'
+    timeout: 6000
+    optional: true
+- takeScreenshot: ipad-landscape-prompter-settings
+
+- setOrientation: PORTRAIT
+- waitForAnimationToEnd

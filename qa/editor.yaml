@@ -1,0 +1,54 @@
+# Editor: open a script, type a sentence at the end of the body, watch the footer word count go up, then take it out again.
+appId: ${APP_ID}
+name: Editor
+---
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: library
+
+# "Client testimonial ask" is the demo script whose whole body fits on one screen with room under the last line, which is
+# what lets the flow put the cursor at the very end by tapping the empty space below the text.
+- extendedWaitUntil:
+    visible: 'Client testimonial ask'
+    timeout: 20000
+- tapOn: 'Client testimonial ask'
+- assertVisible: 'Client testimonial ask'   # the title field
+- assertVisible: '108 words · 0:46 at 140 wpm'
+# This script has no notes or pauses yet, so the one-line tip is under the word count (Markdown formatting is on by
+# default, so it mentions Markdown too).
+- assertVisible: 'Tip: start a line with // for a note, or write \[pause 2\] to hold\. Markdown works too: \*\*bold\*\* shows in amber, # starts a heading\.'
+# The amber Prompt button is in the top bar and enabled (it is greyed out when the script has no words).
+- assertVisible:
+    text: 'Prompt'
+    enabled: true
+- takeScreenshot: editor-open
+
+# Tap below the last line: UITextView puts the cursor at the end of the text. Maestro has no "End" key on iOS, so this is
+# the way to get there. The leading space keeps the new words apart from "Speak soon." (7 words, 33 characters).
+- tapOn:
+    point: '50%,88%'
+- inputText: ' Typed by Maestro for the QA run.'
+- assertVisible: '115 words · .* at 140 wpm'
+# Where the sentence landed can only be seen in the screenshot: the body is a single accessibility element and iOS hands
+# Maestro only the first ~400 characters of its value, so the end of the script cannot be asserted on.
+- takeScreenshot: editor-typed
+
+# Take the sentence out again, so the footer goes back to where it started.
+- eraseText: 33
+- assertVisible: '108 words · 0:46 at 140 wpm'
+- tapOn: 'Done'   # Done in the navigation bar (it is only there while a field has focus); it puts the keyboard away
+- assertNotVisible: 'Done'   # and with no field focused, Done is gone again
+- assertVisible:
+    text: 'Prompt'
+    enabled: true
+- takeScreenshot: editor-final
+
+# Back in the library the script is still there. It was edited, so it has moved to the top and says "now".
+- tapOn: 'Scripts'
+- extendedWaitUntil:
+    visible: 'Prompt Client testimonial ask'
+    timeout: 10000
+- assertVisible: '108 words · 0:46 · .*'
+- takeScreenshot: editor-back-in-library

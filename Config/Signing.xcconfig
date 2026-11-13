@@ -1,0 +1,11 @@
+// Signing defaults shared by every target (applied by project.yml `configFiles`).
+// Don't put your own values here: copy Config/Local.xcconfig.example to Config/Local.xcconfig (git-ignored) and edit that.
+// The simulator needs neither value; a real iPhone/Apple Watch needs both.
+
+// Your Apple developer Team ID (Xcode → Settings → Accounts → your team; 10 letters/digits). Empty = no device signing.
+DEVELOPMENT_TEAM =
+// Bundle IDs are built from this: <prefix>.prompter (iPhone) and <prefix>.prompter.watchkitapp (watch).
+// Bundle IDs are unique across all of Apple, so for a device install use your own prefix, e.g. com.yourname.
+BUNDLE_ID_PREFIX = com.example
+
+#include? "Local.xcconfig"

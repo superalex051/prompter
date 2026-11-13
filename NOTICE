@@ -1,0 +1,18 @@
+Copyright (C) 2026 Florida Focus Creation LLC
+
+Prompter is licensed under the GNU General Public License version 3 (see LICENSE).
+Earlier versions
+Earlier versions of Prompter were published under the MIT License. Anyone who
+received those copies keeps their MIT rights for them.
+
+Name and icon
+"Prompter" and the Prompter app icon are trademarks of Florida Focus Creation LLC.
+They are not licensed under the GPL. If you fork this project and distribute your
+own build, give it a different name and a different icon.
+
+Website
+The code in website/ is licensed under the GPL like the rest of the project.
+The text, images and design of the website in website/ are all rights reserved.
+
+Apple device images
+Apple's device images are not part of this repository.

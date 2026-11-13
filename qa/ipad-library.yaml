@@ -1,0 +1,119 @@
+# iPad library: the split view (script list on the left, the open script's editor on the right) at regular width.
+# iPad only. Run it on an iPad simulator:  SIM_UDID=<iPad UDID> scripts/qa.sh ipad-library
+# (A plain `scripts/qa.sh` runs the iPhone flows on an iPhone and the ipad-* flows on an iPad.)
+appId: ${APP_ID}
+name: iPad library
+---
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: library
+- extendedWaitUntil:
+    visible: 'Prompt Welcome to Prompter'
+    timeout: 20000
+# Portrait on purpose (swipes and taps are in portrait points). The simulator keeps the orientation an earlier run left
+# it in, so it is set explicitly rather than assumed.
+- setOrientation: PORTRAIT
+- waitForAnimationToEnd
+
+# Nothing is open yet: the list is on the left and the right side says what to do.
+- assertVisible: 'Pick a script or make a new one'
+- assertVisible: 'New script'
+- assertVisible: 'Channel intro: rig tour'
+- assertVisible: 'Client testimonial ask'
+- assertNotVisible: 'Untitled'
+- takeScreenshot: ipad-library-empty-detail
+
+# Tapping a row opens that script's editor in the detail; the list stays.
+- tapOn: 'Client testimonial ask'
+- extendedWaitUntil:
+    visible: '108 words · 0:46 at 140 wpm'
+    timeout: 5000
+- assertNotVisible: 'Pick a script or make a new one'
+- assertVisible: 'Prompt Welcome to Prompter'
+- takeScreenshot: ipad-library-selected
+
+# Another row replaces it. The footer is the proof the editor really switched scripts (it keeps its text in @State).
+- tapOn: 'Product review: camera'
+- extendedWaitUntil:
+    visible: '154 words · 1:06 at 140 wpm'
+    timeout: 5000
+- assertNotVisible: '108 words · 0:46 at 140 wpm'
+
+# Deleting the open script clears the detail; Undo brings the row back and opens it again.
+# (Swiped by points, left of the Prompt button. A swipe from the title text stopped working once the demo title got long
+# enough to truncate in the narrow list: the text's centre moved and the row's Delete action never opened.)
+- swipe:
+    start: 19%, 22%
+    end: 4%, 22%
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    visible: 'Deleted .*Product review.*'
+    timeout: 5000
+- assertVisible: 'Pick a script or make a new one'
+- assertNotVisible: '154 words · 1:06 at 140 wpm'
+- takeScreenshot: ipad-library-deleted-open-script
+- tapOn: 'Undo'
+- extendedWaitUntil:
+    visible: '154 words · 1:06 at 140 wpm'
+    timeout: 5000
+- assertVisible: 'Prompt Product review: camera'
+- assertNotVisible: 'Pick a script or make a new one'
+
+# New script opens a blank editor next to the list; opening another script drops the untouched blank one.
+- tapOn: 'Add script'
+- tapOn: 'New script'
+- assertVisible: 'Start typing your script…'
+- assertVisible: '0 words · 0:00 at 140 wpm'
+- takeScreenshot: ipad-library-new-script
+- tapOn: 'Welcome to Prompter'
+- extendedWaitUntil:
+    visible: '246 words · 1:47 at 140 wpm'
+    timeout: 5000
+- assertNotVisible: 'Untitled'
+
+# Prompt opens the prompter over everything, as on the phone; closing it returns to the split view with the script still open.
+- tapOn: 'Prompt Client testimonial ask'
+- extendedWaitUntil:
+    visible:
+      id: 'prompter.hud'
+    timeout: 10000
+- assertVisible: 'Ready, .* left, 140 wpm'   # the prompter's own clock, not the library's (0:47 against 0:46)
+- takeScreenshot: ipad-library-prompter
+- tapOn:
+    id: 'prompter.close'
+- extendedWaitUntil:
+    visible: '246 words · 1:47 at 140 wpm'
+    timeout: 10000
+- assertVisible: 'Prompt Client testimonial ask'
+
+# The -route editor launch option picks the newest script in the detail.
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: editor
+- extendedWaitUntil:
+    visible: '165 words · 1:11 at 140 wpm'
+    timeout: 20000
+- assertNotVisible: 'Pick a script or make a new one'
+- assertVisible: 'Prompt Welcome to Prompter'
+- takeScreenshot: ipad-library-route-editor
+
+# Renaming the open script from the sidebar shows up in its editor's title field: the editor must not keep its old draft.
+# (The Prompt button's label is unique to the sidebar row, so the long-press cannot land on the editor's title field.)
+- longPressOn: 'Prompt Channel intro: rig tour'
+- tapOn: 'Rename'
+- eraseText: 40
+- inputText: 'Rig tour, renamed'
+- waitForAnimationToEnd   # one run tapped Save while the keyboard was still settling and the dialog stayed open
+- tapOn: 'Save'
+- extendedWaitUntil:
+    visible:
+      id: 'editor.title'
+      text: 'Rig tour, renamed'
+    timeout: 5000
+- assertVisible: 'Prompt Rig tour, renamed'
+- assertNotVisible: 'Channel intro: rig tour'
+- takeScreenshot: ipad-library-renamed-open-script

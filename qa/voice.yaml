@@ -1,0 +1,107 @@
+# Voice mode: picking Voice in Settings with the microphone allowed and denied, and the prompter in voice mode both ways.
+# Denied must say so in plain words (settings footer and HUD) and scroll at the WPM pace instead.
+#
+# The flow never starts a voice take with the microphone allowed: on the simulator that would open the Mac's microphone
+# (and the simulator can't recognise speech anyway, see scripts/voice-demo.sh for watching voice mode follow a
+# read-through). Permissions are set by Maestro's launchApp, so no system prompt appears.
+appId: ${APP_ID}
+name: Voice
+---
+# --- Denied ---
+- launchApp:
+    clearState: true
+    permissions:
+      microphone: deny
+      speech: deny
+    arguments:
+      -demoData: "true"
+      -route: settings
+- extendedWaitUntil:
+    visible: 'Scrolling'
+    timeout: 20000
+- tapOn: 'Voice'
+- assertVisible:
+    text: 'Voice'
+    selected: true
+# The footer says what is wrong, what happens instead and how to fix it, then what voice mode does.
+- extendedWaitUntil:
+    visible: 'Voice needs microphone access\. Scrolling at your set pace instead\.\s+Turn on Microphone for Prompter in the Settings app\.\s+The text follows your voice.*'
+    timeout: 5000
+- assertVisible: 'Open Settings'
+- assertVisible: 'Words per minute.*'
+- takeScreenshot: voice-settings-denied
+- tapOn: 'Done'
+
+# The prompter in voice mode: the HUD says it can't listen, and the pace is WPM.
+- launchApp:
+    permissions:
+      microphone: deny
+      speech: deny
+    arguments:
+      -demoData: "true"
+      -route: prompter
+      -scrollMode: voice
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Voice needs microphone access\. Scrolling at your set pace instead\. Ready, 1:11 left, 140 wpm'
+    timeout: 20000
+- assertVisible:
+    id: prompter.voiceNotice
+- takeScreenshot: voice-prompter-denied
+# Start: it counts down and scrolls at 140 wpm like WPM mode (no "Listening…", no silent nothing).
+- tapOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Playing, .*, 140 wpm'
+    timeout: 10000
+- assertNotVisible:
+    id: prompter.voiceNotice
+- takeScreenshot: voice-prompter-denied-playing
+- tapOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Voice needs microphone access\. Scrolling at your set pace instead\. Paused, .*, 140 wpm'
+    timeout: 5000
+
+# --- Allowed ---
+- launchApp:
+    clearState: true
+    permissions:
+      microphone: allow
+      speech: allow
+    arguments:
+      -demoData: "true"
+      -route: settings
+- extendedWaitUntil:
+    visible: 'Scrolling'
+    timeout: 20000
+- tapOn: 'Voice'
+- extendedWaitUntil:
+    visible: 'The text follows your voice as you read and waits when you stop\..*nothing is recorded or sent anywhere\..*'
+    timeout: 5000
+- assertNotVisible: 'Open Settings'
+- assertNotVisible: 'Voice needs.*'
+- takeScreenshot: voice-settings
+- tapOn: 'Done'
+
+- launchApp:
+    permissions:
+      microphone: allow
+      speech: allow
+    arguments:
+      -demoData: "true"
+      -route: prompter
+      -scrollMode: voice
+- extendedWaitUntil:
+    visible:
+      id: prompter.hud
+      text: 'Ready, 1:11 left, Voice'
+    timeout: 20000
+- assertNotVisible:
+    id: prompter.voiceNotice
+- takeScreenshot: voice-prompter-ready

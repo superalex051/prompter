@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Template for scripts/archive.sh. The script copies this to build/ExportOptions.plist and writes the real team ID into
+	     `teamID`, so no team ID is stored in the repo. Do not point xcodebuild at this file directly. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>teamID</key>
+	<string>FILLED_IN_BY_ARCHIVE_SH</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<!-- Keep the build number exactly as project.yml says (scripts/bump-build.sh) instead of letting Xcode renumber it at export. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

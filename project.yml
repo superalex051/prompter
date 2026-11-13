@@ -1,0 +1,183 @@
+name: Prompter
+options:
+  deploymentTarget:
+    iOS: "26.0"
+    watchOS: "10.0"
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0.0"          # shared by the phone and watch apps (App Store Connect requires them to match)
+    CURRENT_PROJECT_VERSION: "1"        # build number; run scripts/bump-build.sh before every TestFlight upload
+    CODE_SIGN_STYLE: Automatic
+# DEVELOPMENT_TEAM and BUNDLE_ID_PREFIX come from Config/Signing.xcconfig, which includes your git-ignored Config/Local.xcconfig.
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+targets:
+  Prompter:
+    type: application
+    platform: iOS
+    sources:
+      - path: Prompter
+      - path: Core
+      - path: Shared
+    dependencies:
+      - target: PrompterWatch
+    info:
+      path: Prompter/Info.plist
+      properties:
+        CFBundleDisplayName: Prompter
+        # XcodeGen's default Info.plist hard-codes "1.0"/"1"; point both at the build settings so one number rules both apps.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Sync uses TLS through Apple's Network framework only (no own crypto), which is exempt: see docs/testflight-checklist.md.
+        ITSAppUsesNonExemptEncryption: false
+        # Mac ⇄ iPhone script sync (M7): the iPhone browses Bonjour for the Mac.
+        NSLocalNetworkUsageDescription: Prompter finds your Mac on this network to sync your scripts.
+        NSBonjourServices:
+          - _prompter-sync._tcp
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark   # the app is dark-only; without this the launch screen flashes white before the first frame
+        CADisableMinimumFrameDurationOnPhone: true   # lets the prompter's display link run at 120 Hz on ProMotion iPhones
+        # Voice-follow (scroll mode "Voice"): asked only when Voice is picked or a voice take opens. SpeechAnalyzer needs only
+        # the microphone; the speech-recognition prompt appears only where the older on-device recogniser is the fallback.
+        NSMicrophoneUsageDescription: Prompter listens to your voice so the script follows you as you speak. Audio stays on this device.
+        NSSpeechRecognitionUsageDescription: Speech is recognized on this device to keep the script in step with you.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).prompter
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  PrompterWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: PrompterWatch
+      - path: Shared
+    info:
+      path: PrompterWatch/Info.plist
+      properties:
+        CFBundleDisplayName: Prompter
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: $(BUNDLE_ID_PREFIX).prompter
+        WKRunsIndependentlyOfCompanionApp: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).prompter.watchkitapp
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  PrompterMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: PrompterMac
+      - path: Core
+      - path: Shared
+    info:
+      path: PrompterMac/Info.plist
+      properties:
+        CFBundleName: Prompter
+        CFBundleDisplayName: Prompter
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHumanReadableCopyright: Copyright 2026 Florida Focus Creation LLC
+        ITSAppUsesNonExemptEncryption: false
+        # Mac ⇄ iPhone script sync (M7): the Mac advertises a Bonjour service the iPhone connects to.
+        NSLocalNetworkUsageDescription: Prompter finds your iPhone on this network to sync your scripts.
+        NSBonjourServices:
+          - _prompter-sync._tcp
+        # The commit scripts/deploy-mac.sh built this copy from (empty in other builds); it tells which copies need an update.
+        PrompterRevision: $(PROMPTER_REVISION)
+    settings:
+      base:
+        # The app is "Prompter.app"; the Swift module stays PrompterMac (tests: `@testable import PrompterMac`).
+        PRODUCT_NAME: Prompter
+        PRODUCT_MODULE_NAME: PrompterMac
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).prompter.mac
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # Signed "to run locally" (ad hoc): builds and runs on this Mac without anyone's Apple account or team.
+        # Not sandboxed (a direct developer build); a Mac App Store build would need the sandbox + network entitlements.
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        ENABLE_APP_SANDBOX: NO
+        COMBINE_HIDPI_IMAGES: YES
+      configs:
+        Debug:
+          ENABLE_HARDENED_RUNTIME: NO
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
+  PrompterMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: PrompterMacTests
+      - path: CoreTests   # platform-neutral tests of Core/, run on both platforms
+    dependencies:
+      - target: PrompterMac
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).prompter.mac.tests
+        # XcodeGen derives the host from the target name; the Mac app's product is Prompter.app.
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Prompter.app/Contents/MacOS/Prompter
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+  PrompterTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: PrompterTests
+      - path: CoreTests
+    dependencies:
+      - target: Prompter
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).prompter.tests
+schemes:
+  Prompter:
+    build:
+      targets:
+        Prompter: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PrompterTests
+  PrompterWatch:
+    build:
+      targets:
+        PrompterWatch: all
+    run:
+      config: Debug
+  PrompterMac:
+    build:
+      targets:
+        PrompterMac: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PrompterMacTests
