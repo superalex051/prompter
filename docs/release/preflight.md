@@ -5,6 +5,7 @@ Run this before every TestFlight or App Store upload. The script does the mechan
 ```bash
 scripts/heavy.sh --task <ID> -- scripts/build.sh            # an unsigned simulator build for the script to inspect
 STORE=1 scripts/preflight.sh                                # the store gate: needs your own bundle ID prefix and a built app
+PREFLIGHT_PLATFORMS=ios STORE=1 scripts/preflight.sh        # store gate for the iPhone and watch apps only (what validate-archive.sh runs)
 scripts/preflight.sh --self-test                            # checks the checker, no Xcode needed
 scripts/validate-archive.sh                                 # after scripts/archive.sh: preflight on the archive, then altool
 ```

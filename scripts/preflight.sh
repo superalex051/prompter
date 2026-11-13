@@ -24,7 +24,7 @@
 # under STORE=1 or REQUIRE_BUILT=1). Build one first with scripts/heavy.sh --task <ID> -- scripts/build.sh.
 #
 # Environment: STORE=1, REQUIRE_BUILT=1, PUBLIC_DENYLIST (default <main checkout>/.inbox/public-denylist.txt),
-# PREFLIGHT_ROOT (the folder holding project.yml; default is this repo).
+# PREFLIGHT_ROOT (the folder holding project.yml; default is this repo), PREFLIGHT_PLATFORMS=ios (skip the Mac app).
 # Exit codes: 0 all clear (warnings allowed), 1 at least one FAIL, 2 usage or setup error.
 set -uo pipefail
 
@@ -123,9 +123,16 @@ first_dir() { local d; for d in "$@"; do [ -n "$d" ] && [ -d "$d" ] && { echo "$
 IOS_APP=""; WATCH_APP=""; MAC_APP=""
 find_apps() {
   local p="$ROOT/build/DerivedData/Build/Products"
-  IOS_APP=$(first_dir "${PREFLIGHT_IOS_APP:-}" "$ROOT/build/Prompter.xcarchive/Products/Applications/Prompter.app" \
-    "$p/Release-iphonesimulator/Prompter.app" "$p/Debug-iphonesimulator/Prompter.app") || IOS_APP=""
+  if [ "${STORE:-}" = 1 ]; then
+    # the store gate inspects the archive (or an app you name), never a simulator build lying around
+    IOS_APP=$(first_dir "${PREFLIGHT_IOS_APP:-}" "$ROOT/build/Prompter.xcarchive/Products/Applications/Prompter.app") || IOS_APP=""
+  else
+    IOS_APP=$(first_dir "${PREFLIGHT_IOS_APP:-}" "$ROOT/build/Prompter.xcarchive/Products/Applications/Prompter.app" \
+      "$p/Release-iphonesimulator/Prompter.app" "$p/Debug-iphonesimulator/Prompter.app") || IOS_APP=""
+  fi
   MAC_APP=$(first_dir "${PREFLIGHT_MAC_APP:-}" "$p/Release/Prompter.app" "$p/Debug/Prompter.app") || MAC_APP=""
+  # PREFLIGHT_PLATFORMS=ios checks the iPhone and watch apps only (the Mac app ships later)
+  case " ${PREFLIGHT_PLATFORMS:-ios mac} " in *" mac "*) ;; *) MAC_APP=""; APPS="Prompter PrompterWatch" ;; esac
   [ -n "$IOS_APP" ] && WATCH_APP=$(first_dir "$IOS_APP/Watch/PrompterWatch.app") || WATCH_APP=""
 }
 built_plist() { # <target>
@@ -370,6 +377,10 @@ PY
 }
 
 # ---------- 7. private denylist inside built binaries ----------
+# mask_path <path> <workdir>: print the path with every plain and word term cut to its first 3 letters
+mask_path() {
+  printf '%s' "$1" | head -c 300 | awk -v f1="$2/plain" -v f2="$2/words" 'BEGIN{for(k=1;k<=2;k++){f=(k==1?f1:f2);while((getline l<f)>0){if(l!="")t[++n]=tolower(l)};close(f)}}{s=$0;for(i=1;i<=n;i++){o="";r=s;while((p=index(tolower(r),t[i]))>0){o=o substr(r,1,p-1) substr(r,p,3) "***";r=substr(r,p+length(t[i]))};s=o r};print s}'
+}
 check_denylist() {
   section "7. private denylist inside built apps"
   local dirs=() t d
@@ -410,14 +421,14 @@ check_denylist() {
       while IFS= read -r term; do
         [ -n "$term" ] || continue
         if grep -qiF -- "$term" "$work/s"; then
-          fail "private term in built file $(printf '%s' "$rel" | awk -v tf="$work/plain" 'BEGIN{while((getline l<tf)>0){if(l!="")t[++n]=tolower(l)}}{s=$0;for(i=1;i<=n;i++){o="";r=s;while((p=index(tolower(r),t[i]))>0){o=o substr(r,1,p-1) substr(r,p,3) "***";r=substr(r,p+length(t[i]))};s=o r};print s}') [$(mask "$term")]"
+          fail "private term in built file $(mask_path "$rel" "$work") [$(mask "$term")]"
           hits=$((hits + 1))
         fi
       done < "$work/plain"
       while IFS= read -r term; do
         [ -n "$term" ] || continue
         if grep -qiwF -- "$term" "$work/s"; then
-          fail "private word in built file $(printf '%s' "$rel" | head -c 200 | awk -v tf="$work/words" 'BEGIN{while((getline l<tf)>0){if(l!="")t[++n]=tolower(l)}}{s=$0;for(i=1;i<=n;i++){o="";r=s;while((p=index(tolower(r),t[i]))>0){o=o substr(r,1,p-1) substr(r,p,3) "***";r=substr(r,p+length(t[i]))};s=o r};print s}') [$(mask "$term")]"
+          fail "private word in built file $(mask_path "$rel" "$work") [$(mask "$term")]"
           hits=$((hits + 1))
         fi
       done < "$work/words"
@@ -467,6 +478,7 @@ check_built_shape() {
     return 0
   fi
   ok "iPhone app: ${IOS_APP#"$ROOT"/}"
+  if [ "${STORE:-}" = 1 ] && [[ "$IOS_APP" == *iphonesimulator* ]]; then fail "STORE=1 but the iPhone app is a simulator build ($IOS_APP). Point PREFLIGHT_IOS_APP at the archived app"; fi
   if [ -z "$WATCH_APP" ]; then fail "the watch app is not embedded under Watch/ in the iPhone app"; else
     ok "watch app embedded"
     local pid wid comp
@@ -476,7 +488,8 @@ check_built_shape() {
     [ "$comp" = "$pid" ] && ok "watch companion ID matches the phone" || fail "WKCompanionAppBundleIdentifier '$comp' is not '$pid'"
   fi
   if [ -n "$MAC_APP" ]; then ok "Mac app: ${MAC_APP#"$ROOT"/}"
-  else skip "no built Mac app found: Mac binary checks skipped"; fi
+  elif [[ " $APPS " == *" PrompterMac "* ]]; then skip "no built Mac app found: Mac binary checks skipped"
+  else skip "PREFLIGHT_PLATFORMS excludes the Mac app: Mac checks skipped"; fi
 }
 
 run_all() {
@@ -692,6 +705,15 @@ self_test() {
   runenv; expect "denylisted term inside a built binary fails" 1 "[Zeb***]"
   if printf '%s' "$OUT" | grep -qi 'zebrafoo'; then bad "output leaked a full term"; else pass "full term never printed"; fi
   printf 'plain program text\n' > "$ios/Prompter"
+  printf 'x\n' > "$ios/Zebrafoo.dat"
+  runenv; expect "term in a built file name fails, name masked" 1 "Zeb***.dat"
+  if printf '%s' "$OUT" | grep -qi 'zebrafoo'; then bad "file name leaked a full term"; else pass "full term never printed from a file name"; fi
+  rm "$ios/Zebrafoo.dat"; printf 'x\n' > "$ios/Quux.dat"
+  runenv; expect "word in a built file name is masked in the plain branch too" 1 "Quu***.dat"
+  rm "$ios/Quux.dat"; printf 'x\n' > "$ios/Zebrafoo Quux.dat"
+  runenv; expect "both term kinds in one name are both masked" 1 "Zeb*** Quu***.dat"
+  if printf '%s' "$OUT" | grep -qiE 'zebrafoo|quux'; then bad "name leaked a term"; else pass "no term leaked from a mixed name"; fi
+  rm "$ios/Zebrafoo Quux.dat"
   printf 'a Quux appears\n' > "$w/PrompterWatch"
   runenv; expect "denylisted whole word inside a built binary fails" 1 "[Quu***]"
   printf 'scaleQuuxy is not the word\n' > "$w/PrompterWatch"
@@ -702,6 +724,17 @@ self_test() {
   runenv STORE=1; expect "STORE=1 with the com.example prefix fails" 1 "BUNDLE_ID_PREFIX is 'com.example'"
   printf 'BUNDLE_ID_PREFIX = com.acme   // real\n' > "$r/Config/Signing.xcconfig"
   runenv STORE=1; expect "STORE=1 with a real prefix passes" 0 "bundle ID prefix is 'com.acme'"
+  runenv STORE=1 PREFLIGHT_PLATFORMS=ios; expect "PREFLIGHT_PLATFORMS=ios passes and skips the Mac app" 0 "Mac checks skipped"
+  mv "$r/PrompterMac/PrivacyInfo.xcprivacy" "$tmp/macpriv.bak"
+  runenv STORE=1; expect "STORE=1 with no Mac manifest fails" 1 "no PrompterMac/PrivacyInfo.xcprivacy"
+  runenv STORE=1 PREFLIGHT_PLATFORMS=ios; expect "STORE=1 iOS-only passes without a Mac manifest" 0 "preflight: OK"
+  mv "$tmp/macpriv.bak" "$r/PrompterMac/PrivacyInfo.xcprivacy"
+  mkdir -p "$tmp/sim/Release-iphonesimulator"; cp -R "$ios" "$tmp/sim/Release-iphonesimulator/Prompter.app"
+  runenv STORE=1 PREFLIGHT_IOS_APP="$tmp/sim/Release-iphonesimulator/Prompter.app"; expect "STORE=1 on a simulator build fails" 1 "is a simulator build"
+  mv "$r/build/Prompter.xcarchive" "$tmp/archive.bak"
+  mkdir -p "$r/build/DerivedData/Build/Products/Release-iphonesimulator"; cp -R "$tmp/sim/Release-iphonesimulator/Prompter.app" "$r/build/DerivedData/Build/Products/Release-iphonesimulator/"
+  runenv STORE=1; expect "STORE=1 ignores a DerivedData simulator build" 1 "no built iPhone app"
+  rm -rf "$r/build/DerivedData/Build/Products/Release-iphonesimulator"; mv "$tmp/archive.bak" "$r/build/Prompter.xcarchive"
   mv "$r/build" "$tmp/build.bak"
   runenv STORE=1; expect "STORE=1 with no built app fails" 1 "no built iPhone app"
   runenv; expect "no built app skips binary checks" 0 "binary checks skipped"

@@ -65,7 +65,7 @@ if [ "${SKIP_PREFLIGHT:-}" != 1 ]; then
   ARCHIVED_APP="build/Prompter.xcarchive/Products/Applications/Prompter.app"
   if [ -d "$ARCHIVED_APP" ]; then
     echo "validate-archive: preflight on $ARCHIVED_APP"
-    if ! STORE=1 PREFLIGHT_IOS_APP="$ARCHIVED_APP" scripts/preflight.sh; then
+    if ! STORE=1 PREFLIGHT_PLATFORMS=ios PREFLIGHT_IOS_APP="$ARCHIVED_APP" scripts/preflight.sh; then
       echo "validate-archive: preflight failed. Fix the FAIL lines first." >&2
       exit 1
     fi
