@@ -61,7 +61,7 @@ test('privacy before launch: no iCloud or purchase sections', () => {
   }
   assert.match(today, /The Prompter app collects no data\./);
   assert.match(today, /useprompter\.app sets no cookies/);
-  assert.match(today, /passes through Namecheap's email forwarding to Google Workspace/);
+  assert.match(today, /Email to that address is delivered by Google Workspace, and Google's privacy policy applies\./);
   const both = withFlags({ storeState: 'live', icloud: true });
   const later = text(both, privacyBlocks(both));
   for (const shown of ['Purchases', 'iCloud key-value', 'Data Not Collected', 'campaign tag']) assert.ok(later.includes(shown), shown);
