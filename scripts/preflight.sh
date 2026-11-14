@@ -18,8 +18,10 @@
 #
 # Built apps are looked for here (first match wins), or set the variable:
 #   iPhone app  $PREFLIGHT_IOS_APP, build/Prompter.xcarchive/Products/Applications/Prompter.app,
-#               build/DerivedData/Build/Products/{Release,Debug}-iphonesimulator/Prompter.app
-#   Mac app     $PREFLIGHT_MAC_APP, build/DerivedData/Build/Products/{Release,Debug}/Prompter.app
+#               build/DerivedData/Build/Products/{Release,Store Release}-iphonesimulator/Prompter.app
+#   Mac app     $PREFLIGHT_MAC_APP, build/DerivedData/Build/Products/{Release,Store Release}/Prompter.app
+# Only Release-type products are inspected. Debug builds always embed home paths and test bundles, so they are never
+# scanned: if only a Debug app exists the script warns and skips the binary checks. Test bundles (*.xctest) are never scanned.
 # The watch app is read from <iPhone app>/Watch/PrompterWatch.app. With no built app the binary checks are skipped (and fail
 # under STORE=1 or REQUIRE_BUILT=1). Build one first with scripts/heavy.sh --task <ID> -- scripts/build.sh.
 #
@@ -120,7 +122,7 @@ has_word() { case " $1 " in *" $2 "*) return 0 ;; esac; return 1; }
 
 # ---------- finding the built apps ----------
 first_dir() { local d; for d in "$@"; do [ -n "$d" ] && [ -d "$d" ] && { echo "$d"; return 0; }; done; return 1; }
-IOS_APP=""; WATCH_APP=""; MAC_APP=""
+IOS_APP=""; WATCH_APP=""; MAC_APP=""; DEBUG_IOS=""; DEBUG_MAC=""
 find_apps() {
   local p="$ROOT/build/DerivedData/Build/Products"
   if [ "${STORE:-}" = 1 ]; then
@@ -128,9 +130,13 @@ find_apps() {
     IOS_APP=$(first_dir "${PREFLIGHT_IOS_APP:-}" "$ROOT/build/Prompter.xcarchive/Products/Applications/Prompter.app") || IOS_APP=""
   else
     IOS_APP=$(first_dir "${PREFLIGHT_IOS_APP:-}" "$ROOT/build/Prompter.xcarchive/Products/Applications/Prompter.app" \
-      "$p/Release-iphonesimulator/Prompter.app" "$p/Debug-iphonesimulator/Prompter.app") || IOS_APP=""
+      "$p/Release-iphonesimulator/Prompter.app" "$p/Store Release-iphonesimulator/Prompter.app") || IOS_APP=""
   fi
-  MAC_APP=$(first_dir "${PREFLIGHT_MAC_APP:-}" "$p/Release/Prompter.app" "$p/Debug/Prompter.app") || MAC_APP=""
+  MAC_APP=$(first_dir "${PREFLIGHT_MAC_APP:-}" "$p/Release/Prompter.app" "$p/Store Release/Prompter.app") || MAC_APP=""
+  # Debug products are never inspected; remember them so the report can say why nothing was checked
+  DEBUG_IOS=""; DEBUG_MAC=""
+  if [ -z "$IOS_APP" ]; then DEBUG_IOS=$(first_dir "$p/Debug-iphonesimulator/Prompter.app" "$p/Store Debug-iphonesimulator/Prompter.app") || DEBUG_IOS=""; fi
+  if [ -z "$MAC_APP" ]; then DEBUG_MAC=$(first_dir "$p/Debug/Prompter.app" "$p/Store Debug/Prompter.app") || DEBUG_MAC=""; fi
   # PREFLIGHT_PLATFORMS=ios checks the iPhone and watch apps only (the Mac app ships later)
   case " ${PREFLIGHT_PLATFORMS:-ios mac} " in *" mac "*) ;; *) MAC_APP=""; APPS="Prompter PrompterWatch" ;; esac
   [ -n "$IOS_APP" ] && WATCH_APP=$(first_dir "$IOS_APP/Watch/PrompterWatch.app") || WATCH_APP=""
@@ -432,7 +438,7 @@ check_denylist() {
           hits=$((hits + 1))
         fi
       done < "$work/words"
-    done < <(find "$d" -type f -print0)
+    done < <(find "$d" -type f -not -path '*.xctest/*' -not -name '*.debug.dylib' -print0)
   done
   [ "$hits" -eq 0 ] && ok "scanned $files files in ${#dirs[@]} built app(s) with strings: no private term"
   rm -rf "$work"
@@ -472,6 +478,8 @@ check_prefix() {
 # ---------- built app structure ----------
 check_built_shape() {
   section "built apps"
+  if [ -n "$DEBUG_IOS" ]; then warn "only a Debug iPhone app found (${DEBUG_IOS#"$ROOT"/}): not inspected, Debug builds embed home paths. Build with CONFIG=Release scripts/build.sh"; fi
+  if [ -n "$DEBUG_MAC" ] && [[ " $APPS " == *" PrompterMac "* ]]; then warn "only a Debug Mac app found (${DEBUG_MAC#"$ROOT"/}): not inspected, Debug builds embed home paths. Build with CONFIG=Release scripts/build-mac.sh"; fi
   if [ -z "$IOS_APP" ]; then
     if [ "${STORE:-}" = 1 ] || [ "${REQUIRE_BUILT:-}" = 1 ]; then fail "no built iPhone app found, and this run needs one (see the header of this script for where it looks)"
     else skip "no built iPhone app found: binary checks skipped (scripts/heavy.sh --task <ID> -- scripts/build.sh builds one)"; fi
@@ -739,6 +747,18 @@ self_test() {
   runenv STORE=1; expect "STORE=1 with no built app fails" 1 "no built iPhone app"
   runenv; expect "no built app skips binary checks" 0 "binary checks skipped"
   mv "$tmp/build.bak" "$r/build"
+
+  # Debug-only products are never scanned: warn and skip, even when they hold a home path
+  mkdir -p "$tmp/dbg" && mv "$r/build/DerivedData/Build/Products/Release" "$tmp/dbg/Release"
+  mkdir -p "$r/build/DerivedData/Build/Products/Debug"; cp -R "$tmp/dbg/Release/Prompter.app" "$r/build/DerivedData/Build/Products/Debug/Prompter.app"
+  printf 'Zebrafoo\n' > "$r/build/DerivedData/Build/Products/Debug/Prompter.app/Contents/MacOS/Prompter.debug.dylib"
+  mkdir -p "$r/build/DerivedData/Build/Products/Debug/PrompterMacTests.xctest"; printf 'plain\n' > "$r/build/DerivedData/Build/Products/Debug/PrompterMacTests.xctest/t"
+  runenv; expect "a Debug-only Mac app warns and is not scanned" 0 "only a Debug Mac app found"
+  rm -rf "$r/build/DerivedData/Build/Products/Debug"; mv "$tmp/dbg/Release" "$r/build/DerivedData/Build/Products/Release"
+  # a test bundle inside a Release app is skipped by the denylist scan
+  mkdir -p "$mac/Contents/PlugIns/T.xctest"; printf 'Zebrafoo\n' > "$mac/Contents/PlugIns/T.xctest/t"
+  runenv; expect "test bundles are never scanned" 0 "preflight: OK"
+  rm -rf "$mac/Contents/PlugIns/T.xctest"
 
   rm -rf "$tmp"
   if [ "$fails" -eq 0 ]; then echo "self-test: OK"; return 0; fi

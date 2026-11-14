@@ -3,7 +3,8 @@
 Run this before every TestFlight or App Store upload. The script does the mechanical part; the rest is a short manual list.
 
 ```bash
-scripts/heavy.sh --task <ID> -- scripts/build.sh            # an unsigned simulator build for the script to inspect
+scripts/heavy.sh --task <ID> -- env CONFIG=Release scripts/build.sh      # an unsigned Release simulator build for the script to inspect
+scripts/heavy.sh --task <ID> -- env CONFIG=Release scripts/build-mac.sh  # same for the Mac app
 STORE=1 scripts/preflight.sh                                # the store gate: needs your own bundle ID prefix and a built app
 PREFLIGHT_PLATFORMS=ios STORE=1 scripts/preflight.sh        # store gate for the iPhone and watch apps only (what validate-archive.sh runs)
 scripts/preflight.sh --self-test                            # checks the checker, no Xcode needed
@@ -12,6 +13,13 @@ scripts/validate-archive.sh                                 # after scripts/arch
 
 `STORE=1` fails on purpose in a fresh clone: `Config/Local.xcconfig` is missing, so the bundle ID prefix is still `com.example`.
 Without `STORE=1` the script reports that as a skip, because a self-build is allowed to use it.
+
+## Which builds it inspects
+
+Only Release-type products: `Release` and `Store Release` under `build/DerivedData/Build/Products`, the archive, or a path you give in
+`PREFLIGHT_IOS_APP` or `PREFLIGHT_MAC_APP`. Debug builds always embed home paths, so they are never scanned. If the only app on disk
+is a Debug one, the script prints a warning that names it and skips the binary checks (it does not report a pass for them).
+Test bundles (`*.xctest`) and `*.debug.dylib` files are never scanned.
 
 ## What the script checks
 
