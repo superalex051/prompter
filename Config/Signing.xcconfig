@@ -1,4 +1,4 @@
-// Signing defaults shared by every target (applied by project.yml `configFiles`).
+// Signing and build defaults shared by every target and every configuration (applied by project.yml `configFiles`).
 // Don't put your own values here: copy Config/Local.xcconfig.example to Config/Local.xcconfig (git-ignored) and edit that.
 // The simulator needs neither value; a real iPhone/Apple Watch needs both.
 
@@ -7,5 +7,67 @@ DEVELOPMENT_TEAM =
 // Bundle IDs are built from this: <prefix>.prompter (iPhone) and <prefix>.prompter.watchkitapp (watch).
 // Bundle IDs are unique across all of Apple, so for a device install use your own prefix, e.g. com.yourname.
 BUNDLE_ID_PREFIX = com.example
+
+// ---- What kind of build this is ----
+// Plain Debug and Release are the self-build anyone can make from the source: every feature is on (Pro included), nothing
+// is bought through the App Store, there is no iCloud, and the apps carry no entitlements, so a free Apple ID (Personal
+// Team) can sign them. Everything below stays empty or default in these two configurations.
+// Store Debug and Store Release (Config/StoreDebug.xcconfig, Config/StoreRelease.xcconfig) also read the git-ignored
+// Config/Store.xcconfig, which holds the store switches and values (see Config/Store.xcconfig.example). Nothing else reads it.
+
+// Swift conditions: PROMPTER_STORE (Pro is sold through the App Store) and PROMPTER_CLOUD (iCloud sync). project.yml adds
+// them to SWIFT_ACTIVE_COMPILATION_CONDITIONS and to the PrompterBuildFlags Info key, so a test can check the two agree.
+PROMPTER_FLAGS =
+// The iCloud container. Empty = iCloud off (Core/Cloud/CloudConfiguration.swift). The build scripts always empty it, so an
+// unsigned script build never claims a container it has no entitlement for.
+PROMPTER_CLOUD_CONTAINER =
+
+// The app's identity: the bundle ID of the iPhone and iPad app. The watch app is <this>.watchkitapp. Store Debug changes it
+// to the dev identity <prefix>.prompter.dev. The iCloud key-value store is named after it.
+PROMPTER_APP_ID = $(BUNDLE_ID_PREFIX).prompter
+
+// Entitlements file of the iPhone and iPad app. Empty = none. Only the Store configurations set it.
+PROMPTER_IOS_ENTITLEMENTS =
+
+// ---- Prompter for Mac flavors ----
+//   selfbuild  signed to run locally (ad hoc), not sandboxed, <prefix>.prompter.mac. The default in plain Debug and Release.
+//   qa         ad hoc and sandboxed, <prefix>.prompter.mac.qa: the sandbox without a team. Only on request (MAC_FLAVOR=qa).
+//   store      signed by the store team, sandboxed, with the iPhone app's bundle ID (the dev identity in Store Debug) and
+//              the iCloud entitlements. Store Debug and Store Release pick it.
+// The build and test scripts always pass PROMPTER_MAC_FLAVOR (selfbuild, or qa) and PROMPTER_MAC_SIGN_IDENTITY=-, so a script
+// build is never signed by a team, whatever the configuration. Only scripts/build-cloud.sh builds the store flavor.
+PROMPTER_MAC_FLAVOR = selfbuild
+
+PROMPTER_MAC_BUNDLE_ID = $(PROMPTER_MAC_BUNDLE_ID_$(PROMPTER_MAC_FLAVOR))
+PROMPTER_MAC_BUNDLE_ID_selfbuild = $(BUNDLE_ID_PREFIX).prompter.mac
+PROMPTER_MAC_BUNDLE_ID_qa = $(BUNDLE_ID_PREFIX).prompter.mac.qa
+PROMPTER_MAC_BUNDLE_ID_store = $(PROMPTER_APP_ID)
+
+PROMPTER_MAC_SIGN_IDENTITY = $(PROMPTER_MAC_SIGN_IDENTITY_$(PROMPTER_MAC_FLAVOR))
+PROMPTER_MAC_SIGN_IDENTITY_selfbuild = -
+PROMPTER_MAC_SIGN_IDENTITY_qa = -
+PROMPTER_MAC_SIGN_IDENTITY_store = Apple Development
+
+// The store team comes from Config/Store.xcconfig (PROMPTER_STORE_TEAM, set by the Store configurations).
+PROMPTER_MAC_TEAM = $(PROMPTER_MAC_TEAM_$(PROMPTER_MAC_FLAVOR))
+PROMPTER_MAC_TEAM_selfbuild =
+PROMPTER_MAC_TEAM_qa =
+PROMPTER_MAC_TEAM_store = $(PROMPTER_STORE_TEAM)
+
+PROMPTER_MAC_SANDBOX = $(PROMPTER_MAC_SANDBOX_$(PROMPTER_MAC_FLAVOR))
+PROMPTER_MAC_SANDBOX_selfbuild = NO
+PROMPTER_MAC_SANDBOX_qa = YES
+PROMPTER_MAC_SANDBOX_store = YES
+
+PROMPTER_MAC_ENTITLEMENTS = $(PROMPTER_MAC_ENTITLEMENTS_$(PROMPTER_MAC_FLAVOR))
+PROMPTER_MAC_ENTITLEMENTS_selfbuild =
+PROMPTER_MAC_ENTITLEMENTS_qa =
+PROMPTER_MAC_ENTITLEMENTS_store = Config/Entitlements/PrompterMac.entitlements
+
+// Only the store flavor carries the iCloud entitlements, so only it may name a container.
+PROMPTER_MAC_CLOUD_CONTAINER = $(PROMPTER_MAC_CLOUD_CONTAINER_$(PROMPTER_MAC_FLAVOR))
+PROMPTER_MAC_CLOUD_CONTAINER_selfbuild =
+PROMPTER_MAC_CLOUD_CONTAINER_qa =
+PROMPTER_MAC_CLOUD_CONTAINER_store = $(PROMPTER_CLOUD_CONTAINER)
 
 #include? "Local.xcconfig"

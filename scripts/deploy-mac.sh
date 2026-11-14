@@ -35,6 +35,12 @@ STAGING="Library/Caches/prompter-deploy"                         # on the remote
 AGENT_LABEL="${AGENT_LABEL:-local.prompter-deploy}"
 AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
 SSH_OPTS=(-i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new)
+# The build every copy gets: plain Release, a self-build (every feature on, no iCloud; it never reads Config/Store.xcconfig),
+# in the selfbuild Mac flavor (ad hoc, not sandboxed, no team). PROMPTER_FLAGS= keeps the store switches out even if
+# Config/Local.xcconfig (copied in below) sets them. CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO stops Xcode adding get-task-allow,
+# so the installed app carries no entitlements at all and a debugger can't attach to it. Keep it on one line:
+# scripts/check-selfbuild.sh builds with exactly these settings and checks the app carries no entitlements.
+DEPLOY_BUILD_SETTINGS=(-configuration Release PROMPTER_MAC_FLAVOR=selfbuild PROMPTER_MAC_SIGN_IDENTITY=- PROMPTER_MAC_TEAM= PROMPTER_CLOUD_CONTAINER= PROMPTER_FLAGS= CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO)
 
 mkdir -p "$WORK"
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
@@ -135,7 +141,7 @@ if [ "$(revision_of "$APP")" != "$rev" ]; then
   fi
   cp "$REPO/Config/Local.xcconfig" "$TREE/Config/" 2>/dev/null || true
   if ! (cd "$TREE" && xcodegen generate --quiet &&
-        xcodebuild -project Prompter.xcodeproj -scheme PrompterMac -configuration Release \
+        xcodebuild -project Prompter.xcodeproj -scheme PrompterMac "${DEPLOY_BUILD_SETTINGS[@]}" \
           -destination "generic/platform=macOS" -derivedDataPath "$WORK/DerivedData" -quiet \
           PROMPTER_REVISION="$rev" CURRENT_PROJECT_VERSION="$(git -C "$REPO" rev-list --count "$rev")" build); then
     echo "$rev" > "$WORK/failed"
@@ -143,6 +149,15 @@ if [ "$(revision_of "$APP")" != "$rev" ]; then
     exit 1
   fi
   log "built $short"
+fi
+
+# The build must be the self-build: no store switch (Pro would be locked on the rig) and no iCloud container.
+info_of() { /usr/libexec/PlistBuddy -c "Print :$2" "$1/Contents/Info.plist" 2>/dev/null || true; }
+built_flags="$(info_of "$APP" PrompterBuildFlags)"
+built_container="$(info_of "$APP" PrompterCloudContainer)"
+if [ -n "$(echo $built_flags $built_container)" ]; then
+  log "the build of $short is not the self-build (switches '$built_flags', container '$built_container'), not installing it"
+  exit 1
 fi
 
 # 2. This Mac.

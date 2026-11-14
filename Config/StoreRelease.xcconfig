@@ -1,0 +1,19 @@
+// The Store Release configuration: the app that ships on the App Store (iPhone, iPad and Mac share one bundle ID, so one
+// purchase covers all of them), with the store iCloud container. scripts/archive.sh archives this configuration.
+// The switches and values come from the git-ignored Config/Store.xcconfig (copy Config/Store.xcconfig.example).
+// Without that file this is a plain build, and scripts/archive.sh refuses to archive it.
+#include "Signing.xcconfig"
+
+PROMPTER_STORE_RELEASE_TEAM =
+PROMPTER_STORE_RELEASE_PREFIX = com.example
+PROMPTER_STORE_RELEASE_CONTAINER =
+
+PROMPTER_STORE_TEAM = $(PROMPTER_STORE_RELEASE_TEAM)
+DEVELOPMENT_TEAM = $(PROMPTER_STORE_RELEASE_TEAM)
+BUNDLE_ID_PREFIX = $(PROMPTER_STORE_RELEASE_PREFIX)
+PROMPTER_APP_ID = $(BUNDLE_ID_PREFIX).prompter
+PROMPTER_CLOUD_CONTAINER = $(PROMPTER_STORE_RELEASE_CONTAINER)
+PROMPTER_IOS_ENTITLEMENTS = Config/Entitlements/Prompter.entitlements
+PROMPTER_MAC_FLAVOR = store
+
+#include? "Store.xcconfig"

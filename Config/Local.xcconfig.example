@@ -1,4 +1,6 @@
 // Copy this file to Config/Local.xcconfig (it's git-ignored), fill in your values, then run `xcodegen generate`.
+// It is all a self-build needs: plain Debug and Release read it, and every feature is on.
+// App Store builds (Store Debug, Store Release) take their team, prefix and switches from Config/Store.xcconfig instead.
 
 // Xcode → Settings → Accounts → select your Apple ID → your team. The 10-character Team ID.
 DEVELOPMENT_TEAM = ABCDE12345

@@ -191,7 +191,7 @@ PrompterTests/     iPhone unit tests
 PrompterMacTests/  Mac unit tests
 CoreTests/         tests of Core/, run on both platforms
 qa/                Maestro UI flows for the simulator
-Config/            signing: Signing.xcconfig plus your git-ignored Local.xcconfig
+Config/            build settings: Signing.xcconfig, the Store configurations, your git-ignored Local.xcconfig
 scripts/           build, test, QA, screenshots, end-to-end checks, archive, deploy, icons
 website/           the project website (has its own AGENTS.md)
 docs/              guide, design spec, feature research, plans, progress log, screenshots
@@ -211,6 +211,7 @@ scripts/watch-mac-e2e.sh  # Apple Watch → iPhone → Mac end to end
 DEPLOY_HOSTS="" scripts/deploy-mac.sh   # build main, install Prompter for Mac in /Applications (DEPLOY_HOSTS is required: "" = this Mac only)
 scripts/heavy.sh --task <ID> -- <command>   # one-at-a-time lock for builds and simulator runs, so jobs don't pile up
 scripts/check-public.sh # fail if a private term is about to be published
+scripts/check-selfbuild.sh  # check that a fresh clone still builds the free way: no entitlements, every feature on
 ```
 
 > [!NOTE]

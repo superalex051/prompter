@@ -91,11 +91,15 @@ Pick one route.
 
 **Route A: script**
 ```bash
-TEAM_ID=<your team ID> scripts/archive.sh
+REHEARSAL=1 TEAM_ID=<your team ID> scripts/archive.sh   # the self-build: every feature on, no purchase, no iCloud
+TEAM_ID=<your team ID> scripts/archive.sh               # the store build (Store Release); needs Config/Store.xcconfig
 ```
-It archives the `Prompter` scheme (Release, generic iOS device, watch app embedded), stops if the phone and watch apps in the archive
+It archives the `Prompter` scheme (generic iOS device, watch app embedded), stops if the phone and watch apps in the archive
 differ in version or build number, exports `build/export/Prompter.ipa`, and prints the next steps. It refuses to run without `TEAM_ID`. Add `DRY_RUN=1` to
-print the commands without running them.
+run its checks and print the commands without running them.
+Without `REHEARSAL=1` it archives Store Release and refuses anything that is not a store build, so a self-build can't reach the
+App Store by mistake. `REHEARSAL=1` archives plain Release, the self-build: use it for an upload rehearsal, or to share your
+own build with your testers through your own TestFlight. It is never the store app.
 Then upload the `.ipa`: open **Transporter** (Mac App Store), sign in with the Apple ID, drag in `build/export/Prompter.ipa`, click
 Deliver.
 
