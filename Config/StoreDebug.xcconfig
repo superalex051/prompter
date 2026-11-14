@@ -1,0 +1,19 @@
+// The Store Debug configuration: a store build for testing, under the dev identity <prefix>.prompter.dev on iPhone, iPad
+// and Mac, with the dev iCloud container and key-value store. It never touches the shipping app's data.
+// The switches and values come from the git-ignored Config/Store.xcconfig (copy Config/Store.xcconfig.example).
+// Without that file this is a plain build with a com.example dev identity, and the scripts refuse to run it.
+#include "Signing.xcconfig"
+
+PROMPTER_STORE_DEBUG_TEAM =
+PROMPTER_STORE_DEBUG_PREFIX = com.example
+PROMPTER_STORE_DEBUG_CONTAINER =
+
+PROMPTER_STORE_TEAM = $(PROMPTER_STORE_DEBUG_TEAM)
+DEVELOPMENT_TEAM = $(PROMPTER_STORE_DEBUG_TEAM)
+BUNDLE_ID_PREFIX = $(PROMPTER_STORE_DEBUG_PREFIX)
+PROMPTER_APP_ID = $(BUNDLE_ID_PREFIX).prompter.dev
+PROMPTER_CLOUD_CONTAINER = $(PROMPTER_STORE_DEBUG_CONTAINER)
+PROMPTER_IOS_ENTITLEMENTS = Config/Entitlements/Prompter.entitlements
+PROMPTER_MAC_FLAVOR = store
+
+#include? "Store.xcconfig"

@@ -24,7 +24,7 @@ Shared/ Core/        code shared between targets
 PrompterTests/ CoreTests/ PrompterMacTests/   unit tests (Swift Testing)
 qa/                  Maestro UI flows (screenshots go to qa/output, git-ignored)
 scripts/             build, test, QA, deploy and check scripts
-Config/              xcconfig files; Local.xcconfig is git-ignored (signing values)
+Config/              xcconfig files and entitlements; Local.xcconfig and Store.xcconfig are git-ignored
 docs/                spec, research, guide, PROGRESS.md, screenshots
 website/             getprompter.app: Next.js + Tailwind. Vercel builds website/ from GitHub.
                      website/ has its own AGENTS.md with the site rules.
@@ -51,6 +51,9 @@ scripts/qa.sh [flow...]                 # Maestro UI flows in qa/ on a simulator
 scripts/sim-shot.sh <name> [delay] -- <launch args>   # install last build, launch (e.g. -demoData -route editor), screenshot
 scripts/sync-e2e.sh                     # Mac app + iPhone simulator sync end to end (loopback, -demoData)
 scripts/check-public.sh                 # fail if a tracked file or unpushed commit message holds a private term
+scripts/check-selfbuild.sh              # free self-build gate: a clean copy builds with no entitlements, Pro on, no iCloud
+CONFIG="Store Debug" scripts/test.sh    # the store code; CONFIG works the same in build.sh, build-mac.sh, test-mac.sh, qa.sh
+scripts/build-cloud.sh ios <UDID> | mac # signed Store Debug apps with iCloud (the owner, main checkout only)
 xcrun simctl list devices available     # find simulator UDIDs
 xcodebuild -downloadPlatform watchOS    # one-time: install the watchOS simulator runtime (large download)
 xcrun simctl pair <watchUDID> <phoneUDID>   # pair a watch simulator with an iPhone simulator
@@ -62,6 +65,28 @@ xcrun simctl pair <watchUDID> <phoneUDID>   # pair a watch simulator with an iPh
   prefix from the git-ignored `Config/Local.xcconfig` (copy `Config/Local.xcconfig.example`).
 - To run on a real device: run `xcodegen generate`, open `Prompter.xcodeproj`, choose the device, Run. The watch app installs
   through the iPhone's Watch app, or pick the watch as the destination with the `PrompterWatch` scheme.
+
+### Build configurations
+- **Debug and Release are the self-build**: every feature on (Pro included), no App Store purchase, no iCloud, no
+  entitlements, so a free Personal Team can sign them. They never read `Config/Store.xcconfig`. Neither does
+  `scripts/deploy-mac.sh`, which always builds plain Release.
+- **Store Debug and Store Release** also read the git-ignored `Config/Store.xcconfig` (copy `Config/Store.xcconfig.example`):
+  the `PROMPTER_STORE` and `PROMPTER_CLOUD` switches, plus the team, prefix and iCloud container for each. Store Debug is the
+  dev identity `<prefix>.prompter.dev` on iPhone, iPad and Mac (watch: `.prompter.dev.watchkitapp`), with the dev container.
+  Store Release is the shipping app; the Mac shares the iPhone's bundle ID there.
+- In Swift, read the switches through `BuildFlags` (`Core/Support/BuildFlags.swift`) and iCloud through
+  `CloudConfiguration.current()` (`Core/Cloud/`). Never call CloudKit, the key-value store or StoreKit unless
+  `CloudConfiguration` or the store switch says so, and never from a test outside an `SKTestSession` or a fake.
+- To test store code in a worktree, copy `Config/Store.xcconfig.example` to `Config/Store.xcconfig`; placeholder values are
+  fine. Script builds (`build.sh`, `test.sh`, `build-mac.sh`, `test-mac.sh`, `qa.sh`) are never team-signed, carry no
+  entitlements and drop the iCloud container in every configuration, and they stop when a Store configuration has no
+  `Config/Store.xcconfig`.
+- Mac flavors (`PROMPTER_MAC_FLAVOR`): `selfbuild` (ad hoc, not sandboxed, `<prefix>.prompter.mac`) is the script and Xcode
+  default. `MAC_FLAVOR=qa` gives the sandboxed ad hoc `<prefix>.prompter.mac.qa`; keep worktrees on selfbuild until the Mac
+  sandbox spike clears qa. `store` (team-signed, sandboxed) comes only from the Store configurations, built by
+  `scripts/build-cloud.sh`.
+- `scripts/archive.sh` archives Store Release and refuses anything that is not a store build; `REHEARSAL=1` archives plain
+  Release for a TestFlight rehearsal that is never released.
 
 ### Maestro
 - Maestro is installed at `~/.maestro/bin/maestro` (Java is present). Use it for simulator end-to-end flows of the iPhone app.

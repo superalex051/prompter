@@ -5,17 +5,115 @@
 # Bundle IDs are never written into the scripts: they are read from the built apps (`app_bundle_id`), so a build with
 # any BUNDLE_ID_PREFIX works. Simulators are found by exact name (`sim_udid`), never by "booted" or by a guessed UDID.
 
-# Build configuration: Debug (default) or Release. A Release build ignores every debug launch flag (see
-# Shared/LaunchArguments.swift), so only the qa/release/ flow runs against it.
+# Build configuration (quote the two-word names):
+#   Debug (default), Release          the self-build: every feature on, no App Store purchase, no iCloud.
+#   "Store Debug", "Store Release"    store builds. They also read the git-ignored Config/Store.xcconfig (copy
+#                                     Config/Store.xcconfig.example); the scripts stop when it is missing.
+# Release and Store Release ignore every debug launch flag (see Shared/LaunchArguments.swift), so only the qa/release/ flow
+# runs against them.
 export CONFIG="${CONFIG:-Debug}"
 case "$CONFIG" in
-  Debug|Release) ;;
-  *) echo "CONFIG must be Debug or Release (got '$CONFIG')" >&2; exit 2 ;;
+  Debug|Release) IS_STORE_CONFIG=0 ;;
+  "Store Debug"|"Store Release") IS_STORE_CONFIG=1 ;;
+  *) echo "CONFIG must be Debug, Release, \"Store Debug\" or \"Store Release\" (got '$CONFIG')" >&2; exit 2 ;;
+esac
+case "$CONFIG" in *Release) IS_RELEASE_CONFIG=1 ;; *) IS_RELEASE_CONFIG=0 ;; esac
+if [ "$IS_STORE_CONFIG" = 1 ] && [ ! -f "$(dirname "${BASH_SOURCE[0]}")/../Config/Store.xcconfig" ]; then
+  echo "CONFIG=\"$CONFIG\" needs Config/Store.xcconfig (git-ignored). Copy Config/Store.xcconfig.example and fill it in;" >&2
+  echo "without it a Store configuration quietly builds a self-build." >&2
+  exit 2
+fi
+# What the tests should find (CoreTests/BuildFlagsTests.swift reads it through TEST_RUNNER_PROMPTER_EXPECTED_BUILD).
+if [ "$IS_STORE_CONFIG" = 1 ]; then EXPECTED_BUILD=store; else EXPECTED_BUILD=selfbuild; fi
+
+# Prompter for Mac flavor for script builds: selfbuild (default: ad hoc, not sandboxed) or qa (ad hoc, sandboxed).
+# The team-signed store flavor is built only by scripts/build-cloud.sh.
+export MAC_FLAVOR="${MAC_FLAVOR:-selfbuild}"
+case "$MAC_FLAVOR" in
+  selfbuild|qa) ;;
+  store) echo "MAC_FLAVOR=store is signed by a team: build it with scripts/build-cloud.sh (main checkout only)" >&2; exit 2 ;;
+  *) echo "MAC_FLAVOR must be selfbuild or qa (got '$MAC_FLAVOR')" >&2; exit 2 ;;
 esac
 
-# Where xcodebuild leaves the apps (relative to the repo root, which the scripts cd into).
+# Settings every script build passes to xcodebuild, whatever the configuration and whatever Config/Local.xcconfig or
+# Config/Store.xcconfig say: no entitlements and no iCloud container (an app without the iCloud entitlement must never
+# open one), and on the Mac an ad hoc signature with no team. So a script build in a Store configuration has the store
+# code compiled in but is never team-signed. Only scripts/build-cloud.sh builds signed store apps.
+UNSIGNED_SETTINGS=(PROMPTER_CLOUD_CONTAINER= PROMPTER_IOS_ENTITLEMENTS=)
+MAC_UNSIGNED_SETTINGS=(PROMPTER_CLOUD_CONTAINER= PROMPTER_IOS_ENTITLEMENTS= PROMPTER_MAC_FLAVOR="$MAC_FLAVOR"
+  PROMPTER_MAC_SIGN_IDENTITY=- PROMPTER_MAC_TEAM=)
+
+# Where xcodebuild leaves the apps (relative to the repo root, which the scripts cd into). The Store folders have a space
+# in their name ("Store Debug-iphonesimulator"), so always quote these.
 IOS_APP_DEFAULT="build/DerivedData/Build/Products/${CONFIG}-iphonesimulator/Prompter.app"
 MAC_APP_DEFAULT="build/DerivedData/Build/Products/${CONFIG}/Prompter.app"
+
+# app_info <path to a built .app> <key>: a top-level Info.plist value, empty when the key is missing.
+app_info() {
+  local app="$1" key="$2" plist
+  for plist in "$app/Info.plist" "$app/Contents/Info.plist"; do
+    if [ -f "$plist" ]; then
+      /usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null || true
+      return 0
+    fi
+  done
+  echo "No Info.plist in $app" >&2
+  return 1
+}
+
+# app_has_switch <path to a built .app> <switch>: succeeds when the app's PrompterBuildFlags names the switch.
+app_has_switch() {
+  local flags
+  flags="$(app_info "$1" PrompterBuildFlags)" || return 1
+  case " $(echo $flags) " in *" $2 "*) return 0 ;; esac
+  return 1
+}
+
+# check_script_build <path to a built .app>: the app is what this configuration should make, so a Store configuration that
+# lost its switches, or a self-build that gained some, stops the script. A script build never names an iCloud container.
+check_script_build() {
+  local app="$1" flags container
+  flags="$(app_info "$app" PrompterBuildFlags)" || return 1
+  container="$(app_info "$app" PrompterCloudContainer)" || return 1
+  flags="$(echo $flags)"
+  if [ "$IS_STORE_CONFIG" = 1 ]; then
+    if ! app_has_switch "$app" PROMPTER_STORE; then
+      echo "$CONFIG built a self-build (PrompterBuildFlags is '$flags'): set PROMPTER_FLAGS in Config/Store.xcconfig" >&2
+      return 1
+    fi
+  elif [ -n "$flags" ]; then
+    echo "$CONFIG must be a self-build, but PrompterBuildFlags is '$flags' (is PROMPTER_FLAGS set in Config/Local.xcconfig?)" >&2
+    return 1
+  fi
+  if [ -n "$(echo $container)" ]; then
+    echo "A script build must not name an iCloud container, but $app has '$container'" >&2
+    return 1
+  fi
+  echo "build kind OK: $CONFIG, switches '${flags:-none}', no iCloud container"
+}
+
+# check_archived_app <path to an archived .app> <configuration>: a "Store Release" archive must be a store build
+# (PROMPTER_STORE in its PrompterBuildFlags) and a plain "Release" archive (REHEARSAL=1) a self-build. scripts/archive.sh
+# runs it before the export.
+check_archived_app() {
+  local app="$1" config="$2" flags
+  flags="$(app_info "$app" PrompterBuildFlags)" || return 1
+  flags="$(echo $flags)"
+  echo "archive: build switches in the archived app: '${flags:-none}'"
+  case "$config" in
+    "Store Release")
+      app_has_switch "$app" PROMPTER_STORE && return 0
+      echo "archive: the archived app is not a store build (no PROMPTER_STORE). Stopping before the export." >&2
+      return 1 ;;
+    Release)
+      [ -z "$flags" ] && return 0
+      echo "archive: REHEARSAL=1 expects a self-build, but the archived app has switches '$flags'. Stopping before the export." >&2
+      return 1 ;;
+    *)
+      echo "archive: unknown configuration '$config'" >&2
+      return 1 ;;
+  esac
+}
 
 # app_bundle_id <path to a built .app>: its CFBundleIdentifier (iOS and watchOS apps keep Info.plist at the top, a Mac
 # app keeps it in Contents/).

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  iPhone and iPad app, Store Debug and Store Release only (PROMPTER_IOS_ENTITLEMENTS in Config/StoreDebug.xcconfig and
+  Config/StoreRelease.xcconfig). Self-builds carry no entitlements. The values come from the git-ignored Config/Store.xcconfig:
+  the container is PROMPTER_CLOUD_CONTAINER, and the key-value store is named after the app's identity, so the iPhone,
+  iPad and Mac builds of one identity share it.
+-->
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>$(PROMPTER_CLOUD_CONTAINER)</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)$(PROMPTER_APP_ID)</string>
+</dict>
+</plist>

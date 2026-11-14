@@ -6,12 +6,13 @@
 #   scripts/qa.sh library settings    # only these flows (a name, name.yaml or qa/name.yaml)
 #   CONFIG=Release scripts/qa.sh      # build the shipping configuration and run the one flow in qa/release/ (a Release
 #                                     # build ignores every launch flag, so the normal flows cannot run against it)
+#   CONFIG="Store Debug" scripts/qa.sh  # the store code (needs Config/Store.xcconfig); "Store Release" runs qa/release/
 #
 # Environment:
 #   SIM       simulator name, default "Prompter Dev iPhone" (the iPad run uses SIM="Prompter Dev iPad"). Found by exact
 #             name; the script stops when no simulator or more than one has that name
 #   SIM_UDID  use this simulator instead of looking SIM up
-#   CONFIG    Debug (default) or Release
+#   CONFIG    Debug (default), Release, "Store Debug" or "Store Release" (see scripts/lib.sh)
 #   The app's bundle ID is read from the built app and handed to every flow as ${APP_ID}.
 #   SKIP_BUILD=1   reuse the last scripts/build.sh output
 #   KEEP_SIM=1     leave the simulator booted afterwards (by default one this script booted is shut down again)
@@ -32,10 +33,10 @@ OUT="qa/output/$STAMP"
 [ -x "$MAESTRO" ] || { echo "Maestro not found at $MAESTRO (set MAESTRO=/path/to/maestro)" >&2; exit 2; }
 
 # --- Which flows. Shared sub-flows belong in qa/helpers/, which the glob below does not reach. Flows for the shipping
-# configuration live in qa/release/ and run only with CONFIG=Release (name one as release/<name>). ---
+# configurations live in qa/release/ and run only with CONFIG=Release or "Store Release" (name one as release/<name>). ---
 FLOWS=()
 DEFAULT_RUN=0
-if [ $# -eq 0 ] && [ "$CONFIG" = "Release" ]; then
+if [ $# -eq 0 ] && [ "$IS_RELEASE_CONFIG" = 1 ]; then
   for f in qa/release/*.yaml; do FLOWS+=("$f"); done
 elif [ $# -eq 0 ]; then
   DEFAULT_RUN=1   # narrowed to the iPhone flows or the iPad flows once the simulator is known (below)
@@ -54,6 +55,7 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
   scripts/build.sh
 fi
 [ -d "$APP" ] || { echo "No build at $APP; run scripts/build.sh first" >&2; exit 1; }
+check_script_build "$APP"
 
 # --- Simulator ---
 if [ -n "${SIM_UDID:-}" ]; then

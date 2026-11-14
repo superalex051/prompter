@@ -17,6 +17,8 @@ PrompterMac/Info.plist
 qa/output/
 # Personal signing values (team ID, bundle ID prefix)
 Config/Local.xcconfig
+# Store and iCloud switches and values (read only by Store Debug and Store Release)
+Config/Store.xcconfig
 # Private notes and the public-check denylist
 .inbox/
 # Website

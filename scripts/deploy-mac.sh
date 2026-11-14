@@ -35,6 +35,10 @@ STAGING="Library/Caches/prompter-deploy"                         # on the remote
 AGENT_LABEL="${AGENT_LABEL:-local.prompter-deploy}"
 AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
 SSH_OPTS=(-i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new)
+# The build every copy gets: plain Release, a self-build (every feature on, no iCloud; it never reads Config/Store.xcconfig),
+# in the selfbuild Mac flavor (ad hoc, not sandboxed, no team, no entitlements). Keep it on one line:
+# scripts/check-selfbuild.sh builds with exactly these settings and checks the app carries no entitlements.
+DEPLOY_BUILD_SETTINGS=(-configuration Release PROMPTER_MAC_FLAVOR=selfbuild PROMPTER_MAC_SIGN_IDENTITY=- PROMPTER_MAC_TEAM= PROMPTER_CLOUD_CONTAINER=)
 
 mkdir -p "$WORK"
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
@@ -135,7 +139,7 @@ if [ "$(revision_of "$APP")" != "$rev" ]; then
   fi
   cp "$REPO/Config/Local.xcconfig" "$TREE/Config/" 2>/dev/null || true
   if ! (cd "$TREE" && xcodegen generate --quiet &&
-        xcodebuild -project Prompter.xcodeproj -scheme PrompterMac -configuration Release \
+        xcodebuild -project Prompter.xcodeproj -scheme PrompterMac "${DEPLOY_BUILD_SETTINGS[@]}" \
           -destination "generic/platform=macOS" -derivedDataPath "$WORK/DerivedData" -quiet \
           PROMPTER_REVISION="$rev" CURRENT_PROJECT_VERSION="$(git -C "$REPO" rev-list --count "$rev")" build); then
     echo "$rev" > "$WORK/failed"

@@ -1,0 +1,23 @@
+// Store and iCloud settings for the App Store builds. Copy this file to Config/Store.xcconfig (git-ignored), fill in your
+// values, then run `xcodegen generate`. Only the Store Debug and Store Release configurations read it. Plain Debug, plain
+// Release and scripts/deploy-mac.sh never do, so the self-build keeps every feature on and stays free of iCloud.
+//
+// You only need this to sell the app or to test the purchase and iCloud. Building Prompter for yourself needs
+// Config/Local.xcconfig at most.
+
+// The switches. PROMPTER_STORE: Pro is sold through the App Store (without it, Pro is simply on).
+// PROMPTER_CLOUD: iCloud sync for scripts and settings.
+PROMPTER_FLAGS = PROMPTER_STORE PROMPTER_CLOUD
+
+// Store Debug: the dev identity for testing, <prefix>.prompter.dev on iPhone, iPad and Mac, with its own iCloud container.
+// It never shares data with the shipping app. An iCloud container can never be deleted, so check the name before the
+// first signed build creates it.
+PROMPTER_STORE_DEBUG_TEAM = ABCDE12345
+PROMPTER_STORE_DEBUG_PREFIX = com.yourname
+PROMPTER_STORE_DEBUG_CONTAINER = iCloud.com.yourname.prompter.dev
+
+// Store Release: the app you ship, <prefix>.prompter on iPhone, iPad and Mac (one purchase covers all three), and the
+// store container. Fill these in once the shipping team exists. scripts/archive.sh refuses the placeholder values below.
+PROMPTER_STORE_RELEASE_TEAM = ABCDE12345
+PROMPTER_STORE_RELEASE_PREFIX = com.yourname
+PROMPTER_STORE_RELEASE_CONTAINER = iCloud.com.yourname.prompter
