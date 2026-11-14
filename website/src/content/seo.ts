@@ -179,7 +179,7 @@ export function llmsTxt(f: Facts): string {
     '## Facts',
     '',
     `- Status: ${listed ? 'on the App Store.' : 'not on the App Store yet. The source code is public and can be built for free.'}`,
-    `- Devices: ${deviceList(f)}${f.platforms.watch ? ' and Apple Watch (remote)' : ''}. Needs iOS 26${f.platforms.ipad ? ', iPadOS 26' : ''}${f.platforms.mac ? ' or macOS 26' : ''} or later.`,
+    `- Devices: ${deviceList(f).replace(' and ', ', ')}${f.platforms.watch ? ', plus an Apple Watch remote' : ''}. Needs iOS 26${f.platforms.ipad ? ', iPadOS 26' : ''}${f.platforms.mac ? ' or macOS 26' : ''} or later.`,
     `- Price: the app is a free download. Prompter Pro is one payment of ${priceLabel(f)} (US price), not a subscription.`,
     `- Free: ${free}.`,
     `- Pro adds: ${pro}.`,

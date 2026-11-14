@@ -134,6 +134,7 @@ test('llms.txt states plain facts that are true in the current flag state', () =
   const txt = llmsTxt(facts);
   assert.match(txt, /^# Prompter\n\n> /);
   assert.match(txt, /not on the App Store yet/);
+  assert.match(txt, /- Devices: iPhone, iPad, Mac, plus an Apple Watch remote\./);
   assert.match(txt, /iCloud sync \(not available yet\)/);
   assert.match(txt, /\$9\.99/);
   assert.match(llmsTxt(withFlags({ storeState: 'live' })), /Status: on the App Store/);
