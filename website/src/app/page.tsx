@@ -44,7 +44,10 @@ export default function Home() {
   return (
     <>
       <section className="s-hero" aria-labelledby="hero-title">
-        <h1 className="s-h1" id="hero-title">Read the script. Keep eye contact.</h1>
+        <h1 className="s-h1" id="hero-title">
+          Read the script. <br />
+          Keep eye contact.
+        </h1>
         <p className="s-sub">{subhead(facts)}</p>
         <div className="s-cta">
           {listed ? null : <p className="s-soon">Coming soon to the App Store</p>}
