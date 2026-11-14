@@ -26,7 +26,7 @@ qa/                  Maestro UI flows (screenshots go to qa/output, git-ignored)
 scripts/             build, test, QA, deploy and check scripts
 Config/              xcconfig files and entitlements; Local.xcconfig and Store.xcconfig are git-ignored
 docs/                spec, research, guide, PROGRESS.md, screenshots
-website/             getprompter.app: Next.js + Tailwind. Vercel builds website/ from GitHub.
+website/             useprompter.app: Next.js + Tailwind. Vercel builds website/ from GitHub.
                      website/ has its own AGENTS.md with the site rules.
 .inbox/              private notes and plans, git-ignored, never committed
 project.yml          XcodeGen source for Prompter.xcodeproj (the .xcodeproj is git-ignored)

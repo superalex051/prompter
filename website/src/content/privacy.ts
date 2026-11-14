@@ -207,10 +207,10 @@ export function privacyBlocks(f: Facts = siteFacts): Block[] {
           text: "Our web host, Vercel, receives the usual details of each visit, such as your IP address, your browser and the page you asked for, so it can deliver the page. It may keep them in short-lived logs [Owner: confirm the log retention for this project]. We don't use them to identify anyone.",
         },
         {
-          text: 'If you email us, we get your email address and what you write. We use them only to answer you, and we delete them [Owner: how long you keep support emails].',
+          text: 'If you email us, we get your email address and what you write. We use them only to answer you, and we delete them 1 year after the last message.',
         },
         {
-          text: "Email to that address passes through Namecheap's email forwarding to Google Workspace, and their privacy policies apply.",
+          text: "Email to that address is delivered by Google Workspace, and Google's privacy policy applies.",
         },
         { text: "GitHub Issues are public and run by GitHub. GitHub's privacy statement applies there." },
       ],

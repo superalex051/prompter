@@ -61,7 +61,7 @@ test('privacy before launch: no iCloud or purchase sections', () => {
   }
   assert.match(today, /The Prompter app collects no data\./);
   assert.match(today, /useprompter\.app sets no cookies/);
-  assert.match(today, /passes through Namecheap's email forwarding to Google Workspace/);
+  assert.match(today, /Email to that address is delivered by Google Workspace, and Google's privacy policy applies\./);
   const both = withFlags({ storeState: 'live', icloud: true });
   const later = text(both, privacyBlocks(both));
   for (const shown of ['Purchases', 'iCloud key-value', 'Data Not Collected', 'campaign tag']) assert.ok(later.includes(shown), shown);
@@ -78,16 +78,15 @@ test('rig guide: first-launch and Pro parts wait for their flags, files line mat
 });
 
 test('owner slots that show today are exactly these', () => {
-  assert.deepEqual(slotsIn(facts, supportBlocks(facts)), [
-    '[Owner: how soon you reply, for example "We answer within two working days."]',
-  ]);
+  assert.deepEqual(slotsIn(facts, supportBlocks(facts)), []);
+  assert.ok(text(facts, supportBlocks(facts)).includes('We reply within 2 business days.'));
+  assert.ok(text(facts, privacyBlocks(facts)).includes('we delete them 1 year after the last message.'));
   assert.deepEqual(
     [privacyEffective, ...slotsIn(facts, privacyBlocks(facts))].map((s) => s.slice(s.indexOf('[Owner:'), s.indexOf('[Owner:') + 40)),
     [
       '[Owner: effective date]',
       '[Owner: at REL-22, look at this prompt o',
       '[Owner: confirm the log retention for th',
-      '[Owner: how long you keep support emails',
     ],
   );
   assert.deepEqual(slotsIn(facts, rigBlocks()), ['[Owner: a photo of your rig]']);

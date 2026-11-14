@@ -46,6 +46,7 @@ npm run dev                                          # the owner's dev server on
 - The price in `facts.ts` is pending StoreKit until the app sells it.
 - Support and privacy text comes from the reviewed copy. Keep its wording; change it there first.
 - Slots read `[Owner: ...]`. Never put a personal name, the company's address or phone in this repo.
+- Production builds (`VERCEL_ENV=production`) refuse unfilled owner slots (`scripts/check-owner-slots.mjs`); preview and local builds show them.
 
 ## Brand
 Dark, system font, amber accent. The approved direction is "page 5": black paper, white ink, amber `oklch(80% 0.165 72)`.

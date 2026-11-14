@@ -24,7 +24,7 @@ export function supportBlocks(f: Facts = siteFacts): Block[] {
       kind: 'ul',
       panel: true,
       items: [
-        { text: `Email ${email}. [Owner: how soon you reply, for example "We answer within two working days."]` },
+        { text: `Email ${email}. We reply within 2 business days.` },
         {
           text: `Found a bug, or want something added? Open an issue on GitHub at ${f.links.githubIssues}. Issues are public, so leave out anything private.`,
         },

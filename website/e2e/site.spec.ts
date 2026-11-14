@@ -120,5 +120,5 @@ test('support: the question list links to every answer', async ({ page }) => {
     await expect(page.locator(href ?? '#missing')).toHaveCount(1);
   }
   await expect(page.getByRole('navigation', { name: 'On this page' })).toBeVisible();
-  await expect(page.locator('.slot')).toHaveCount(1);
+  await expect(page.locator('.slot')).toHaveCount(0);
 });
