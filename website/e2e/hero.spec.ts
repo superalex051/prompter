@@ -53,6 +53,26 @@ test('the text rolls, and Pause stops it and the clock; Play starts it again', a
   expect(await movedIn(page, 700)).toBeGreaterThan(5);
 });
 
+test('the prompter text breaks lines where the app does', async ({ page }) => {
+  await page.goto('/');
+  // App screenshot: "Talk straight down the" / "lens without" / "memorizing a single" / "line."
+  const tops = await page.getByTestId('hero-screen').locator('.proll p').first().evaluate((p) => {
+    const text = p.firstChild as Text;
+    // The word on its own (no surrounding spaces), found as a whole word.
+    const top = (word: string) => {
+      const at = ` ${text.data} `.indexOf(` ${word} `);
+      const r = document.createRange();
+      r.setStart(text, at);
+      r.setEnd(text, at + word.length);
+      return Math.round(r.getBoundingClientRect().top);
+    };
+    return { talk: top('Talk'), the: top('the'), lens: top('lens'), without: top('without') };
+  });
+  expect(tops.the).toBe(tops.talk);
+  expect(tops.lens).toBeGreaterThan(tops.the);
+  expect(tops.without).toBe(tops.lens);
+});
+
 test('Mirror it flips the screen only, and says so as a toggle', async ({ page }) => {
   await page.goto('/');
   const hero = page.getByTestId('hero');

@@ -146,7 +146,8 @@ p, li, dd { text-wrap: pretty; }
   font-family: var(--font-display); font-weight: 800; font-size: 8.24cqi; line-height: 1.88; letter-spacing: -0.005em;
   color: var(--ink); animation: proll 14s linear infinite; will-change: transform;
 }
-.proll p { margin: 0 0 0.5em; }
+/* Plain greedy wrapping, as the app does, so the same words land on each line. */
+.proll p { margin: 0 0 0.5em; text-wrap: wrap; }
 @keyframes proll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
 .paused .proll { animation-play-state: paused; }
 .still .proll { animation: none; transform: translateY(-24.7cqi); }
@@ -188,6 +189,7 @@ p, li, dd { text-wrap: pretty; }
 }
 .s-tile h3 { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.12; margin: 0; }
 .s-tile p { font-size: 17px; line-height: 1.5; color: var(--ink-2); max-width: 34ch; margin: 0; }
+.s-tile-text { display: flex; flex-direction: column; gap: 12px; }
 .s-tile.span { grid-column: 1 / -1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 12px 40px; }
 .s-tag {
   align-self: flex-start; display: inline-block; font: 600 12px/1 var(--font); letter-spacing: 0.02em;

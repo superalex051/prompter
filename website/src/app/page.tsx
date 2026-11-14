@@ -119,9 +119,11 @@ export default function Home() {
           ) : null}
 
           <article className={mac ? 's-tile' : 's-tile span'}>
-            {facts.icloud ? null : <p className="s-tag">Coming soon</p>}
-            <h3>Your scripts, everywhere</h3>
-            <p>Scripts sync through your own iCloud. We never see them.</p>
+            <div className="s-tile-text">
+              {facts.icloud ? null : <p className="s-tag">Coming soon</p>}
+              <h3>Your scripts, everywhere</h3>
+              <p>Scripts sync through your own iCloud. We never see them.</p>
+            </div>
             <div className="s-shot-port">
               <img
                 src="/shots/m1-library.png"
