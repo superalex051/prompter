@@ -2,7 +2,10 @@ import type { Metadata } from 'next';
 import { facts } from '../content/facts.ts';
 
 export const metadata: Metadata = {
-  title: 'Page not found',
+  title: { absolute: `Page not found · ${facts.name}` },
+  robots: { index: false, follow: false },
+  openGraph: null,
+  twitter: null,
 };
 
 // Set as a prompter line between the reading-line chevrons. The host sends a real 404 status.

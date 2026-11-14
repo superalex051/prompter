@@ -2,6 +2,11 @@ import { facts } from '../content/facts.ts';
 import { subhead, priceLabel, proItems, freeItems, isListed, type ListItem } from '../content/claims.ts';
 import { rigFilesLine } from '../content/rig.ts';
 import { Hero } from '../components/Hero';
+import { JsonLd } from '../components/JsonLd';
+import { applicationLd, organizationLd } from '../content/seo.ts';
+import { pageMetadata } from '../lib/meta.ts';
+
+export const metadata = pageMetadata('home');
 import { RigDiagram } from '../components/RigDiagram';
 
 // Plain screenshots until the app is live (no Apple device frames before launch).
@@ -43,6 +48,8 @@ export default function Home() {
 
   return (
     <>
+      <JsonLd data={organizationLd(facts)} />
+      <JsonLd data={applicationLd(facts)} />
       <section className="s-hero" aria-labelledby="hero-title">
         <h1 className="s-h1" id="hero-title">
           Read the script. <br />

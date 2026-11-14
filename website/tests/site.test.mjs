@@ -113,12 +113,14 @@ test('config: static export, pinned versions, dev port, no trackers', () => {
   for (const f of walk('src')) assert.doesNotMatch(readFileSync(join(site, f), 'utf8'), trackers, f);
 });
 
-test('images: only the four app screenshots, no Apple device images', () => {
+test('images: the four app screenshots and the social card, no Apple device images', () => {
   for (const [key, url] of Object.entries(deviceFrames)) {
     assert.ok(url === null || /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//.test(url), key);
   }
   assert.deepEqual(walk('src').filter((f) => /\.(png|jpe?g|webp|avif|gif)$/i.test(f)), []);
+  // og.png is the social card, made by scripts/make-og.mjs from m2-playing-mirrored.png and the wordmark.
   assert.deepEqual(walk('public').sort(), [
+    'public/og.png',
     'public/shots/m1-library.png',
     'public/shots/m2-playing-mirrored.png',
     'public/shots/m3-watch-playing.png',

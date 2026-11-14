@@ -3,14 +3,15 @@ import './globals.css';
 import { Header } from '../components/Header';
 import { Footer } from '../components/Footer';
 import { facts } from '../content/facts.ts';
-import { deviceList, subhead, isListed } from '../content/claims.ts';
+import { siteUrl } from '../content/seo.ts';
+import { pageMetadata } from '../lib/meta.ts';
 
+// Every page sets its own title, description, canonical and cards through pageMetadata().
+// These are the defaults for pages that don't (the 404).
 export const metadata: Metadata = {
-  title: {
-    default: `${facts.name}: a teleprompter for ${deviceList(facts)}`,
-    template: `%s · ${facts.name}`,
-  },
-  description: `${subhead(facts)}${isListed(facts) ? '' : ' Coming soon to the App Store.'}`,
+  ...pageMetadata('home'),
+  metadataBase: new URL(siteUrl(facts)),
+  alternates: undefined,
 };
 
 export const viewport: Viewport = {

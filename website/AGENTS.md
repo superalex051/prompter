@@ -12,6 +12,10 @@ GitHub (Root Directory `website`).
 - `src/content/claims.ts`: lines that depend on facts (subhead, credit line, price, Pro and free lists).
 - `src/content/support.ts`, `privacy.ts`, `rig.ts`: page text as data. Each block can carry `when`, a test on facts.
   Inline markup: `[label](href)`, bare URLs and emails become links, `[Owner: ...]` is a slot the owner fills.
+- `src/content/seo.ts`: per-page titles and descriptions, JSON-LD (Organization, MobileApplication, FAQPage built from the
+  support text, BreadcrumbList), `llms.txt`, `robots.txt` and `sitemap.xml` text. `src/lib/meta.ts` turns it into page
+  metadata (canonical, Open Graph, Twitter). New page: add it to `pages()` in `seo.ts` (a test checks the sitemap against `src/app`).
+- `public/og.png`: the 1200x630 social card, made by `scripts/make-og.mjs` (run it through heavy.sh) from our own screenshot.
 - `src/content/device-frames.ts`: URLs of Apple device images on Vercel Blob. The images are never committed.
 - `public/shots/`: the plain app screenshots used before launch.
 - `tests/`: unit tests (`node:test`). `e2e/`: Playwright tests (`screenshots.spec.ts` runs only with `SHOTS=1`).
