@@ -15,6 +15,7 @@
 #     it must be the team in PROMPTER_STORE_RELEASE_TEAM,
 #   - you signed in to Xcode with that team (Xcode > Settings > Accounts), because -allowProvisioningUpdates lets
 #     xcodebuild create the App Store profiles for <prefix>.prompter and <prefix>.prompter.watchkitapp.
+# Set VALIDATE=1 to run scripts/validate-archive.sh on the .ipa after the export.
 # Set DRY_RUN=1 to run the checks and print the xcodebuild commands (and write build/ExportOptions.plist) without running them.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -138,6 +139,10 @@ if [ "${DRY_RUN:-}" != "1" ]; then
   [ -f "$IPA" ] || { echo "archive: export finished but $IPA is missing. Look in $EXPORT_DIR." >&2; exit 1; }
   echo
   echo "archive: done. Built $IPA"
+  # VALIDATE=1: check the .ipa with App Store Connect before you upload it (scripts/validate-archive.sh).
+  if [ "${VALIDATE:-}" = "1" ]; then
+    scripts/validate-archive.sh "$IPA"
+  fi
 else
   echo
   echo "archive: dry run finished, nothing was archived."
