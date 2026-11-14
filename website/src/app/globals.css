@@ -111,6 +111,8 @@ p, li, dd { text-wrap: pretty; }
   font-family: var(--font-display); font-weight: 700; font-size: clamp(44px, 7.4vw, 96px);
   line-height: 1.04; letter-spacing: -0.025em; margin: 0 auto; max-width: 14ch;
 }
+/* Below 390 px, shrink with the screen so each sentence keeps its own line. */
+@media (max-width: 389px) { .s-h1 { font-size: 11.28vw; } }
 .s-sub { font-size: clamp(19px, 2vw, 24px); line-height: 1.4; color: var(--ink-2); margin: 20px auto 0; max-width: 36ch; text-wrap: balance; }
 .s-cta { display: flex; flex-wrap: wrap; gap: 16px 24px; justify-content: center; align-items: center; margin-top: 32px; }
 .s-soon { font-size: 19px; font-weight: 600; color: var(--ink); line-height: 1.3; margin: 0; }
