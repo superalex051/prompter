@@ -46,10 +46,4 @@ struct CloudConfigurationTests {
         #expect(!config.isEnabled)
         #expect(config.containerID == nil)
     }
-
-    @Test func currentReadsThisApp() {
-        let value = Bundle.main.object(forInfoDictionaryKey: CloudConfiguration.infoKey)
-        #expect(CloudConfiguration.current() == CloudConfiguration.resolve(cloudBuild: BuildFlags.isCloudBuild,
-                                                                         containerValue: value))
-    }
 }

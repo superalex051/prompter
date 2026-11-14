@@ -2,12 +2,13 @@
 # Archive Prompter (the iOS app with the watch app embedded) and export an .ipa for App Store Connect / TestFlight.
 #
 #   TEAM_ID=<your 10-character team ID> scripts/archive.sh                the store build (Store Release)
-#   REHEARSAL=1 TEAM_ID=<your 10-character team ID> scripts/archive.sh    a self-build (plain Release), for an upload rehearsal
+#   REHEARSAL=1 TEAM_ID=<your 10-character team ID> scripts/archive.sh    the self-build (plain Release)
 #
 # By default it archives Store Release: Pro is sold through the App Store and iCloud is on, with the team, prefix and
 # container from the git-ignored Config/Store.xcconfig (PROMPTER_STORE_RELEASE_*). It refuses to archive anything that is
 # not a store build, so a self-build (Pro on for everyone, no iCloud) can't reach the App Store by mistake. REHEARSAL=1
-# archives plain Release instead and is only for TestFlight rehearsals that will never be released.
+# archives plain Release instead: the self-build, for an upload rehearsal or for sharing your own build with your testers
+# through your own TestFlight. It is never the store app.
 #
 # This SIGNS the build, so it is run by the owner, never by an unattended session. It needs:
 #   - TEAM_ID in the environment (your 10-character Apple Developer team ID; refuses to run without it). For a store build
@@ -30,7 +31,7 @@ fi
 
 if [ "${REHEARSAL:-}" = "1" ]; then
   ARCHIVE_CONFIG=Release
-  echo "archive: REHEARSAL=1, archiving a self-build (plain Release: Pro on, no iCloud). Never release this build."
+  echo "archive: REHEARSAL=1, archiving the self-build (plain Release: Pro on, no iCloud). It is not the store app."
 else
   ARCHIVE_CONFIG="Store Release"
 fi
@@ -60,7 +61,7 @@ xcodegen generate --quiet
 if [ "$ARCHIVE_CONFIG" = "Store Release" ]; then
   if [ ! -f Config/Store.xcconfig ]; then
     echo "archive: Config/Store.xcconfig is missing, so Store Release would be a self-build. Copy Config/Store.xcconfig.example" >&2
-    echo "         and fill in the Store Release values (or set REHEARSAL=1 for a rehearsal upload)." >&2
+    echo "         and fill in the Store Release values, or set REHEARSAL=1 to archive the self-build." >&2
     exit 1
   fi
   flags="$(setting_of PROMPTER_FLAGS)"

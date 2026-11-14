@@ -9,13 +9,17 @@
 # It copies the files git would commit (tracked and new, not ignored, local edits included; website/ left out) into
 # build/selfbuild-check/src, so this checkout's own Local.xcconfig and Store.xcconfig can't leak in. Then:
 #   1. build settings in all four configurations: bundle IDs, entitlements, Mac flavor. The watch app and the test targets
-#      never get entitlements, and no watch code reads a store switch.
+#      never get entitlements, and no watch code reads a store switch. Then again with Config/Store.xcconfig.example copied
+#      in as Config/Store.xcconfig: plain Debug and Release must ignore it, and the Store configurations must pick it up.
+#      The copy is removed before anything is built.
 #   2. an unsigned iOS device build (Debug), as Xcode builds it for a free Personal Team: com.example IDs, the watch app
 #      inside, no switches, no iCloud container, nothing signed.
-#   3. the Mac build Xcode makes when you press Run (no settings passed): ad hoc, not sandboxed, no team.
-#   4. the Mac Release build scripts/deploy-mac.sh makes (its DEPLOY_BUILD_SETTINGS): the same.
-#      In both, the only entitlement allowed is com.apple.security.get-task-allow, which Xcode adds to every build that is
-#      not an archive (it lets a debugger attach). No sandbox, iCloud, push or any other capability.
+#   3. the Mac build Xcode makes when you press Run (no settings passed): ad hoc, not sandboxed, no team. The only
+#      entitlement allowed is com.apple.security.get-task-allow, which Xcode adds to every build that is not an archive
+#      (it lets a debugger attach). No sandbox, iCloud, push or any other capability.
+#   4. the Mac Release build scripts/deploy-mac.sh makes (its DEPLOY_BUILD_SETTINGS): ad hoc, no team and no entitlements
+#      at all. First its settings with a stand-in Config/Local.xcconfig that sets the store switches, a container, the
+#      store flavor and a team: the deploy settings must override every one of them.
 #   5. hosted tests on the iPhone simulator and on the Mac (BuildFlagsTests, CloudConfigurationTests), told to expect a
 #      self-build: no switches, Pro on without a purchase, iCloud off.
 set -euo pipefail
@@ -49,54 +53,92 @@ done
 echo "copied $(find "$SRC" -type f | wc -l | tr -d ' ') files; no Local.xcconfig, no Store.xcconfig"
 
 # --- 1. Build settings ---
-step "1. Build settings in Debug, Release, Store Debug and Store Release"
-(cd "$SRC" && for config in Debug Release "Store Debug" "Store Release"; do
-  xcodebuild -project Prompter.xcodeproj -alltargets -configuration "$config" -showBuildSettings -json 2>/dev/null |
-    CONFIG_NAME="$config" python3 -I -c 'import json, os, sys; print(json.dumps({"config": os.environ["CONFIG_NAME"], "targets": json.load(sys.stdin)}))'
-done) > "$LOGS/settings.jsonl"
-python3 -I - "$LOGS/settings.jsonl" <<'PY'
-import json, sys
+# settings_matrix <out>: every target's build settings in all four configurations, one JSON line per configuration.
+settings_matrix() {
+  (cd "$SRC" && for config in Debug Release "Store Debug" "Store Release"; do
+    xcodebuild -project Prompter.xcodeproj -alltargets -configuration "$config" -showBuildSettings -json 2>/dev/null |
+      CONFIG_NAME="$config" python3 -I -c 'import json, os, sys; print(json.dumps({"config": os.environ["CONFIG_NAME"], "targets": json.load(sys.stdin)}))'
+  done) > "$1"
+}
+# check_matrix <settings.jsonl> [<the Store.xcconfig in place>]: the expectations, without or with a Store.xcconfig.
+check_matrix() {
+python3 -I - "$@" <<'PY'
+import json, re, sys
+store = {}  # the Store.xcconfig values, when one is in place
+if len(sys.argv) > 2:
+    for line in open(sys.argv[2]):
+        m = re.match(r"\s*([A-Z_]+)\s*=\s*(.*?)\s*$", line)
+        if m: store[m.group(1)] = m.group(2)
 problems = []
+def words(value): return " ".join(value.split())
 for line in open(sys.argv[1]):
     entry = json.loads(line)
-    config, store = entry["config"], entry["config"].startswith("Store")
+    config, store_config = entry["config"], entry["config"].startswith("Store")
     targets = {t["target"]: t["buildSettings"] for t in entry["targets"]}
     def get(target, key): return targets[target].get(key, "").strip()
     def expect(target, key, want):
         got = get(target, key)
         if got != want: problems.append(f"{config} {target} {key} is {got!r}, expected {want!r}")
-    app_id = {"Debug": "com.example.prompter", "Release": "com.example.prompter",
-              "Store Debug": "com.example.prompter.dev", "Store Release": "com.example.prompter"}[config]
+    if config == "Store Debug":
+        app_id = store.get("PROMPTER_STORE_DEBUG_PREFIX", "com.example") + ".prompter.dev"
+        team, container = store.get("PROMPTER_STORE_DEBUG_TEAM", ""), store.get("PROMPTER_STORE_DEBUG_CONTAINER", "")
+    elif config == "Store Release":
+        app_id = store.get("PROMPTER_STORE_RELEASE_PREFIX", "com.example") + ".prompter"
+        team, container = store.get("PROMPTER_STORE_RELEASE_TEAM", ""), store.get("PROMPTER_STORE_RELEASE_CONTAINER", "")
+    else:  # plain Debug and Release never read Store.xcconfig, whatever it holds
+        app_id, team, container = "com.example.prompter", "", ""
+    flags = words(store.get("PROMPTER_FLAGS", "")) if store_config else ""
     expect("Prompter", "PRODUCT_BUNDLE_IDENTIFIER", app_id)
     expect("PrompterWatch", "PRODUCT_BUNDLE_IDENTIFIER", app_id + ".watchkitapp")
-    expect("Prompter", "CODE_SIGN_ENTITLEMENTS", "Config/Entitlements/Prompter.entitlements" if store else "")
+    expect("Prompter", "DEVELOPMENT_TEAM", team)
+    expect("Prompter", "CODE_SIGN_ENTITLEMENTS", "Config/Entitlements/Prompter.entitlements" if store_config else "")
     for target in ("PrompterWatch", "PrompterTests", "PrompterMacTests"):
         expect(target, "CODE_SIGN_ENTITLEMENTS", "")
-    if store:
+    if store_config:
         expect("PrompterMac", "PRODUCT_BUNDLE_IDENTIFIER", app_id)
         expect("PrompterMac", "CODE_SIGN_ENTITLEMENTS", "Config/Entitlements/PrompterMac.entitlements")
         expect("PrompterMac", "ENABLE_APP_SANDBOX", "YES")
         expect("PrompterMac", "CODE_SIGN_IDENTITY", "Apple Development")
+        expect("PrompterMac", "DEVELOPMENT_TEAM", team)
+        expect("PrompterMac", "PROMPTER_MAC_CLOUD_CONTAINER", container)
     else:
         expect("PrompterMac", "PRODUCT_BUNDLE_IDENTIFIER", "com.example.prompter.mac")
         expect("PrompterMac", "CODE_SIGN_ENTITLEMENTS", "")
         expect("PrompterMac", "ENABLE_APP_SANDBOX", "NO")
         expect("PrompterMac", "CODE_SIGN_IDENTITY", "-")
         expect("PrompterMac", "DEVELOPMENT_TEAM", "")
+        expect("PrompterMac", "PROMPTER_MAC_CLOUD_CONTAINER", "")
         expect("PrompterMacTests", "CODE_SIGN_IDENTITY", "-")
-    # No Config/Store.xcconfig here, so no configuration has a switch or a container.
+    # Every target, the watch and the tests included, sees the same switches and container.
     for target, settings in targets.items():
-        conditions = settings.get("SWIFT_ACTIVE_COMPILATION_CONDITIONS", "")
-        if "PROMPTER_" in conditions: problems.append(f"{config} {target} has switches without Store.xcconfig: {conditions!r}")
-        if settings.get("PROMPTER_CLOUD_CONTAINER", "").strip():
-            problems.append(f"{config} {target} names an iCloud container without Store.xcconfig")
+        if words(settings.get("PROMPTER_FLAGS", "")) != flags:
+            problems.append(f"{config} {target} PROMPTER_FLAGS is {settings.get('PROMPTER_FLAGS', '')!r}, expected {flags!r}")
+        conditions = {w for w in settings.get("SWIFT_ACTIVE_COMPILATION_CONDITIONS", "").split() if w.startswith("PROMPTER_")}
+        if conditions != set(flags.split()):
+            problems.append(f"{config} {target} has the Swift switches {sorted(conditions)}, expected {sorted(flags.split())}")
+        if settings.get("PROMPTER_CLOUD_CONTAINER", "").strip() != container:
+            problems.append(f"{config} {target} PROMPTER_CLOUD_CONTAINER is "
+                            f"{settings.get('PROMPTER_CLOUD_CONTAINER', '')!r}, expected {container!r}")
     print(f"  {config}: {app_id}, Mac {get('PrompterMac', 'PRODUCT_BUNDLE_IDENTIFIER')}"
-          f" (sandbox {get('PrompterMac', 'ENABLE_APP_SANDBOX')}), entitlements only on"
-          f" {', '.join(t for t in ('Prompter', 'PrompterMac') if get(t, 'CODE_SIGN_ENTITLEMENTS')) or 'nothing'}")
+          f" (sandbox {get('PrompterMac', 'ENABLE_APP_SANDBOX')}), switches [{flags}], container [{container}],"
+          f" entitlements only on {', '.join(t for t in ('Prompter', 'PrompterMac') if get(t, 'CODE_SIGN_ENTITLEMENTS')) or 'nothing'}")
 if problems:
     print("\n".join("  " + p for p in problems), file=sys.stderr)
     sys.exit(1)
 PY
+}
+
+step "1. Build settings in Debug, Release, Store Debug and Store Release"
+echo " without Config/Store.xcconfig (a fresh clone): no switches and no container anywhere"
+settings_matrix "$LOGS/settings.jsonl"
+check_matrix "$LOGS/settings.jsonl" || fail "build settings without Config/Store.xcconfig"
+echo " with Config/Store.xcconfig.example copied in as Config/Store.xcconfig: only the Store configurations read it"
+cp "$SRC/Config/Store.xcconfig.example" "$SRC/Config/Store.xcconfig"
+store_ok=1
+settings_matrix "$LOGS/settings-with-store.jsonl" || store_ok=0
+[ "$store_ok" = 0 ] || check_matrix "$LOGS/settings-with-store.jsonl" "$SRC/Config/Store.xcconfig" || store_ok=0
+rm -f "$SRC/Config/Store.xcconfig"
+[ "$store_ok" = 1 ] || fail "build settings with Config/Store.xcconfig in place"
 if grep -rn -e PROMPTER_STORE -e PROMPTER_CLOUD "$SRC/PrompterWatch" "$SRC/Shared" >/dev/null; then
   grep -rn -e PROMPTER_STORE -e PROMPTER_CLOUD "$SRC/PrompterWatch" "$SRC/Shared" >&2
   fail "watch code reads a store switch (the watch app must be the same in every configuration)"
@@ -153,9 +195,42 @@ line="$(grep -E '^DEPLOY_BUILD_SETTINGS=\(' "$SRC/scripts/deploy-mac.sh")" || fa
 eval "$line"
 echo "  settings: ${DEPLOY_BUILD_SETTINGS[*]}"
 case " ${DEPLOY_BUILD_SETTINGS[*]} " in *" -configuration Release "*) ;; *) fail "scripts/deploy-mac.sh does not build plain Release" ;; esac
+# deploy-mac.sh copies the main checkout's Config/Local.xcconfig into its build tree. A stand-in that tries to make it a
+# store build must lose to the deploy settings. Settings only; the stand-in is removed before the build.
+cat > "$SRC/Config/Local.xcconfig" <<'XC'
+DEVELOPMENT_TEAM = ZZZZZZZZZZ
+PROMPTER_FLAGS = PROMPTER_STORE PROMPTER_CLOUD
+PROMPTER_CLOUD_CONTAINER = iCloud.com.example.prompter
+PROMPTER_MAC_FLAVOR = store
+XC
+# check_deploy_pins <control|pinned>: reads -showBuildSettings -json of PrompterMac on stdin.
+check_deploy_pins() {
+  python3 -I -c '
+import json, sys
+s = json.load(sys.stdin)[0]["buildSettings"]
+get = lambda k: s.get(k, "").strip()
+if sys.argv[1] == "control":
+    # Without the deploy settings the stand-in is read, so the pins are what keep it out.
+    sys.exit(0 if "PROMPTER_STORE" in get("PROMPTER_FLAGS") else "  the stand-in Config/Local.xcconfig was not read")
+want = {"PROMPTER_FLAGS": "", "PROMPTER_CLOUD_CONTAINER": "", "PROMPTER_MAC_CLOUD_CONTAINER": "", "ENABLE_APP_SANDBOX": "NO",
+        "CODE_SIGN_IDENTITY": "-", "DEVELOPMENT_TEAM": "", "CODE_SIGN_ENTITLEMENTS": "", "CODE_SIGN_INJECT_BASE_ENTITLEMENTS": "NO"}
+bad = [f"{k} is {get(k)!r}, expected {v!r}" for k, v in want.items() if get(k) != v]
+conditions = get("SWIFT_ACTIVE_COMPILATION_CONDITIONS")
+if any(w.startswith("PROMPTER_") for w in conditions.split()): bad.append(f"the Swift conditions hold a switch: {conditions!r}")
+sys.exit("  " + "; ".join(bad) if bad else 0)
+' "$1"
+}
+pins_ok=1
+(cd "$SRC" && xcodebuild -project Prompter.xcodeproj -target PrompterMac -configuration Release -showBuildSettings -json 2>/dev/null) |
+  check_deploy_pins control || pins_ok=0
+(cd "$SRC" && xcodebuild -project Prompter.xcodeproj -target PrompterMac "${DEPLOY_BUILD_SETTINGS[@]}" -showBuildSettings -json 2>/dev/null) |
+  check_deploy_pins pinned || pins_ok=0
+rm -f "$SRC/Config/Local.xcconfig"
+[ "$pins_ok" = 1 ] || fail "scripts/deploy-mac.sh's settings don't override a Config/Local.xcconfig that sets store values"
+echo "  a Config/Local.xcconfig with the store switches, a container, the store flavor and a team is overridden"
 (cd "$SRC" && xcodebuild -project Prompter.xcodeproj -scheme PrompterMac "${DEPLOY_BUILD_SETTINGS[@]}" \
   -destination "generic/platform=macOS" -derivedDataPath "$DD" -quiet build)
-check_mac "$DD/Build/Products/Release/Prompter.app" com.apple.security.get-task-allow
+check_mac "$DD/Build/Products/Release/Prompter.app" ""
 
 # --- 5. Hosted tests that expect a self-build ---
 step "5. Hosted tests, told to expect a self-build"

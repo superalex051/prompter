@@ -86,7 +86,11 @@ xcrun simctl pair <watchUDID> <phoneUDID>   # pair a watch simulator with an iPh
   sandbox spike clears qa. `store` (team-signed, sandboxed) comes only from the Store configurations, built by
   `scripts/build-cloud.sh`.
 - `scripts/archive.sh` archives Store Release and refuses anything that is not a store build; `REHEARSAL=1` archives plain
-  Release for a TestFlight rehearsal that is never released.
+  Release, the self-build, for an upload rehearsal or a self-builder's own TestFlight. It is never the store app.
+- Mac script builds keep the selfbuild flavor in every configuration, so `CONFIG="Store Debug" scripts/test-mac.sh` runs
+  as `<Store Debug prefix>.prompter.mac`. In the main checkout that is the daily self-build's bundle ID, on purpose: under
+  tests the Mac app uses throwaway storage. The store flavor (`.prompter.dev`) comes only from `scripts/build-cloud.sh mac`.
+  It has no network entitlements until MAC-02b, so Mac sync fails in it.
 
 ### Maestro
 - Maestro is installed at `~/.maestro/bin/maestro` (Java is present). Use it for simulator end-to-end flows of the iPhone app.

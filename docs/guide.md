@@ -353,7 +353,9 @@ latest version, and an app that is one version behind says so instead of syncing
 This is for builds you make yourself. Installing on someone else's phone from Xcode needs their device next to your Mac. **TestFlight** is the easy way to share. It
 needs a paid developer account.
 
-1. Archive and upload: in Xcode, Product → Archive → Distribute → TestFlight, or run `TEAM_ID=<your team ID> scripts/archive.sh`.
+1. Archive and upload: in Xcode, Product → Archive → Distribute → TestFlight, or run `REHEARSAL=1 TEAM_ID=<your team ID> scripts/archive.sh`
+   (`REHEARSAL=1` archives your self-build. Without it the script archives the App Store build, which needs a private
+   `Config/Store.xcconfig`.)
 2. In App Store Connect, create the app record. The store name has to be unique; the home-screen name stays "Prompter".
 3. Add testers:
    - **Internal testers** are members of your developer team. They can install right away.

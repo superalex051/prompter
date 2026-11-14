@@ -33,10 +33,17 @@ struct BuildFlagsTests {
     }
 
     @Test func noStoreSwitchMeansProIsOn() {
-        #expect(BuildFlags.unlocksProWithoutPurchase == !BuildFlags.isStoreBuild)
-        if !BuildFlags.isCloudBuild {
-            #expect(CloudConfiguration.current() == .disabled(.notACloudBuild))
-        }
+        // Checked against the compile conditions themselves, so a hard-coded answer in BuildFlags fails one of the builds.
+        #if PROMPTER_STORE
+        #expect(BuildFlags.isStoreBuild)
+        #expect(!BuildFlags.unlocksProWithoutPurchase)
+        #else
+        #expect(!BuildFlags.isStoreBuild)
+        #expect(BuildFlags.unlocksProWithoutPurchase)
+        #endif
+        #if !PROMPTER_CLOUD
+        #expect(CloudConfiguration.current() == .disabled(.notACloudBuild))
+        #endif
     }
 
     @Test func readsTheInfoValue() {

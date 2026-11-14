@@ -11,9 +11,17 @@
 # It runs only in the main checkout, by the owner, never in a builder's worktree. DRY_RUN=1 checks the settings and prints
 # the build command without building or signing (allowed anywhere).
 #
+# Order: run `mac` (or `ios` with a real device) first. Those builds get a provisioning profile, which registers the App ID
+# and creates the container. A simulator build needs no profile, so it may register nothing: run it on its own and the
+# simulator app names a container that does not exist yet.
+#
+# The store-flavor Mac app has no network entitlements yet (they come with MAC-02b), so its sandbox blocks the Bonjour sync
+# listener: Mac sync with an iPhone is expected to fail in this build. iCloud is what it is for.
+#
 # Output goes to build/CloudDerivedData, apart from the unsigned script builds in build/DerivedData. At the end it prints
 # each app's iCloud entitlements (team ID masked) and fails when the container or the key-value store is missing or a "$("
-# was left unexpanded.
+# was left unexpanded. A Mac or device app keeps them in its code signature. A simulator app keeps them in its binary
+# (the __TEXT,__entitlements section), because its signature is ad hoc and close to empty.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export CONFIG="Store Debug"
@@ -91,24 +99,70 @@ if [ "${DRY_RUN:-}" = "1" ]; then
 fi
 "${BUILD[@]}"
 
+SIMULATOR=0
 if [ "$PLATFORM" = mac ]; then
   APP="$DD/Build/Products/$CONFIG/Prompter.app"
 elif [ -d "$DD/Build/Products/$CONFIG-iphonesimulator/Prompter.app" ] && grep -qF "$UDID" <<<"$(xcrun simctl list devices)"; then
   APP="$DD/Build/Products/$CONFIG-iphonesimulator/Prompter.app"
+  SIMULATOR=1
 else
   APP="$DD/Build/Products/$CONFIG-iphoneos/Prompter.app"
 fi
 [ -d "$APP" ] || { echo "build-cloud: the build finished but $APP is missing" >&2; exit 1; }
 
-# The signed entitlements must hold the real container and key-value store, with nothing left unexpanded.
-ENT="$(codesign -d --entitlements - --xml "$APP" 2>/dev/null || true)"
+# xml_plist <file>: a plist file as XML (it may be binary), or nothing when the file is empty or not a plist.
+xml_plist() { [ -s "$1" ] && plutil -convert xml1 -o - "$1" 2>/dev/null || true; }
+
+# section_entitlements <Mach-O file>: the __TEXT,__entitlements section as XML (nothing when there is none). segedit
+# copies it byte for byte but reads one architecture only, so a universal file is thinned to this Mac's first.
+# (otool -s is no use here: on arm64 it prints the bytes as swapped 4-byte words.)
+section_entitlements() {
+  local bin="$1" tmp thin
+  tmp="$(mktemp -d)"
+  thin="$bin"
+  if [ "$(lipo -archs "$bin" 2>/dev/null | wc -w | tr -d ' ')" -gt 1 ]; then
+    lipo "$bin" -thin "$(uname -m)" -output "$tmp/thin" 2>/dev/null && thin="$tmp/thin"
+  fi
+  if xcrun segedit "$thin" -extract __TEXT __entitlements "$tmp/ent" >/dev/null 2>&1; then xml_plist "$tmp/ent"; fi
+  rm -rf "$tmp"
+}
+
+# read_entitlements <app>: sets ENT to its entitlements as XML, from wherever this kind of build keeps them, and
+# ENT_SOURCE to where that was (or every place it looked).
+read_entitlements() {
+  local app="$1" exe bin xcent looked=""
+  ENT="" ENT_SOURCE=""
+  if [ "$SIMULATOR" = 0 ]; then
+    ENT="$(codesign -d --entitlements - --xml "$app" 2>/dev/null || true)"
+    ENT_SOURCE="the code signature"
+    return 0
+  fi
+  # The simulator: the main binary, or with Xcode's debug dylib the small launcher and Prompter.debug.dylib beside it.
+  exe="$(app_info "$app" CFBundleExecutable)"
+  for bin in "$app/${exe:-Prompter}" "$app/${exe:-Prompter}.debug.dylib"; do
+    [ -f "$bin" ] || continue
+    ENT="$(section_entitlements "$bin")"
+    if [ -n "$ENT" ]; then ENT_SOURCE="the __TEXT,__entitlements section of $bin"; return 0; fi
+    looked="$looked the __TEXT,__entitlements section of $bin;"
+  done
+  # Last resort: the file Xcode embeds, still in the build's intermediates.
+  xcent="$({ find "$DD/Build/Intermediates.noindex" -path "*/$CONFIG-iphonesimulator/*" -name 'Prompter.app-Simulated.xcent' 2>/dev/null || true; } | head -1)"
+  if [ -n "$xcent" ]; then
+    ENT="$(xml_plist "$xcent")"
+    if [ -n "$ENT" ]; then ENT_SOURCE="$xcent, because the binary had no entitlements section"; return 0; fi
+  fi
+  ENT_SOURCE="nowhere. Looked in:$looked ${xcent:-no Prompter.app-Simulated.xcent under $DD/Build/Intermediates.noindex}"
+}
+
+# The entitlements must hold the real container and key-value store, with nothing left unexpanded.
+read_entitlements "$APP"
 masked() { printf '%s' "$1" | sed "s/$team/<team>/g"; }
 bad=0
-if [ -z "$ENT" ]; then echo "build-cloud: $APP has no entitlements" >&2; bad=1; fi
+if [ -z "$ENT" ]; then echo "build-cloud: $APP has no entitlements (read from $ENT_SOURCE)" >&2; bad=1; fi
 case "$ENT" in *'$('*) echo "build-cloud: an entitlement still holds an unexpanded \$( setting" >&2; bad=1 ;; esac
 case "$ENT" in *"<string>$container</string>"*) ;; *) echo "build-cloud: the container $container is not in the entitlements" >&2; bad=1 ;; esac
 case "$ENT" in *"<string>$team.$bundle_id</string>"*) ;; *) echo "build-cloud: the key-value store <team>.$bundle_id is not in the entitlements" >&2; bad=1 ;; esac
-echo "build-cloud: entitlements of $APP:"
+echo "build-cloud: entitlements of $APP, read from $(masked "$ENT_SOURCE"):"
 masked "$(printf '%s' "$ENT" | plutil -p - 2>/dev/null || printf '%s' "$ENT")"; echo
 [ "$bad" = 0 ] || exit 1
 echo "build-cloud: OK, $APP"
