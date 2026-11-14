@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The free self-build gate. What someone gets from a fresh clone, with no Config/Local.xcconfig and no Config/Store.xcconfig
-# (prefix com.example, no team), must still build, carry no entitlements and be a self-build: Pro on, no iCloud. Run it in
+# (prefix com.example, no team), must still build, carry no capabilities and be a self-build: Pro on, no iCloud. Run it in
 # every merge slot, through scripts/heavy.sh (it builds three times and boots a simulator):
 #
 #   scripts/heavy.sh --task <ID> -- scripts/check-selfbuild.sh
@@ -12,9 +12,10 @@
 #      never get entitlements, and no watch code reads a store switch.
 #   2. an unsigned iOS device build (Debug), as Xcode builds it for a free Personal Team: com.example IDs, the watch app
 #      inside, no switches, no iCloud container, nothing signed.
-#   3. the Mac build Xcode makes when you press Run (no settings passed): ad hoc, not sandboxed, and no entitlement except
-#      the get-task-allow Xcode adds to every Debug build.
-#   4. the Mac Release build scripts/deploy-mac.sh makes (its DEPLOY_BUILD_SETTINGS): no entitlements at all.
+#   3. the Mac build Xcode makes when you press Run (no settings passed): ad hoc, not sandboxed, no team.
+#   4. the Mac Release build scripts/deploy-mac.sh makes (its DEPLOY_BUILD_SETTINGS): the same.
+#      In both, the only entitlement allowed is com.apple.security.get-task-allow, which Xcode adds to every build that is
+#      not an archive (it lets a debugger attach). No sandbox, iCloud, push or any other capability.
 #   5. hosted tests on the iPhone simulator and on the Mac (BuildFlagsTests, CloudConfigurationTests), told to expect a
 #      self-build: no switches, Pro on without a purchase, iCloud off.
 set -euo pipefail
@@ -127,16 +128,18 @@ step "3. Mac Debug build with no settings passed (Xcode's Run)"
 MAC="$DD/Build/Products/Debug/Prompter.app"
 # entitlement_keys <app>: the keys of its signed entitlements, one per line (nothing when it has none).
 entitlement_keys() {
-  codesign -d --entitlements - --xml "$1" 2>/dev/null |
+  { codesign -d --entitlements - --xml "$1" 2>/dev/null || true; } |
     python3 -I -c 'import plistlib, sys; d = sys.stdin.buffer.read(); [print(k) for k in (plistlib.loads(d) if d.strip() else {})]'
 }
 check_mac() {
-  local app="$1" allowed="$2" keys extra
+  local app="$1" allowed="$2" keys extra signature
   [ "$(app_bundle_id "$app")" = com.example.prompter.mac ] || fail "$app is $(app_bundle_id "$app")"
   blank "$(app_info "$app" PrompterBuildFlags)" || fail "$app has switches: $(app_info "$app" PrompterBuildFlags)"
   blank "$(app_info "$app" PrompterCloudContainer)" || fail "$app names an iCloud container"
-  codesign -dv "$app" 2>&1 | grep -q '^Signature=adhoc' || fail "$app is not signed ad hoc"
-  codesign -dv "$app" 2>&1 | grep -q '^TeamIdentifier=not set' || fail "$app is signed with a team"
+  # Read once, then match: `codesign | grep -q` fails under pipefail when grep stops reading early.
+  signature="$(codesign -dv "$app" 2>&1 || true)"
+  grep -qx 'Signature=adhoc' <<<"$signature" || fail "$app is not signed ad hoc"
+  grep -qx 'TeamIdentifier=not set' <<<"$signature" || fail "$app is signed with a team"
   keys="$(entitlement_keys "$app")"
   extra="$(printf '%s\n' "$keys" | grep -v -x -e '' ${allowed:+-e "$allowed"} || true)"
   [ -z "$extra" ] || fail "$app carries entitlements: $(echo $extra)"
@@ -152,7 +155,7 @@ echo "  settings: ${DEPLOY_BUILD_SETTINGS[*]}"
 case " ${DEPLOY_BUILD_SETTINGS[*]} " in *" -configuration Release "*) ;; *) fail "scripts/deploy-mac.sh does not build plain Release" ;; esac
 (cd "$SRC" && xcodebuild -project Prompter.xcodeproj -scheme PrompterMac "${DEPLOY_BUILD_SETTINGS[@]}" \
   -destination "generic/platform=macOS" -derivedDataPath "$DD" -quiet build)
-check_mac "$DD/Build/Products/Release/Prompter.app" ""
+check_mac "$DD/Build/Products/Release/Prompter.app" com.apple.security.get-task-allow
 
 # --- 5. Hosted tests that expect a self-build ---
 step "5. Hosted tests, told to expect a self-build"
@@ -176,4 +179,4 @@ ran_as_selfbuild "$LOGS/mac-test.log" || fail "the Mac self-build test did not r
 echo "  Mac: BuildFlagsTests passed as a self-build"
 
 echo
-echo "check-selfbuild: OK. A fresh clone builds for iPhone and Mac with no entitlements, and it is a self-build (Pro on, no iCloud)."
+echo "check-selfbuild: OK. A fresh clone builds for iPhone and Mac with no capabilities, and it is a self-build (Pro on, no iCloud)."

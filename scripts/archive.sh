@@ -38,7 +38,7 @@ fi
 # setting_of <name>: a resolved build setting of the Prompter target in ARCHIVE_CONFIG (empty when unset).
 setting_of() {
   xcodebuild -project Prompter.xcodeproj -target Prompter -configuration "$ARCHIVE_CONFIG" -showBuildSettings 2>/dev/null |
-    awk -v k="$1" '$1 == k && $2 == "=" { sub(/^[^=]*= ?/, ""); print; exit }'
+    awk -v k="$1" '$1 == k && $2 == "=" && !found { sub(/^[^=]*= ?/, ""); print; found = 1 }'
 }
 
 ARCHIVE=build/Prompter.xcarchive

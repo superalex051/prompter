@@ -40,7 +40,7 @@ fi
 xcodegen generate --quiet
 
 SETTINGS="$(xcodebuild -project Prompter.xcodeproj -target "$TARGET" -configuration "$CONFIG" -showBuildSettings 2>/dev/null)"
-setting_of() { printf '%s\n' "$SETTINGS" | awk -v k="$1" '$1 == k && $2 == "=" { sub(/^[^=]*= ?/, ""); print; exit }'; }
+setting_of() { printf '%s\n' "$SETTINGS" | awk -v k="$1" '$1 == k && $2 == "=" && !found { sub(/^[^=]*= ?/, ""); print; found = 1 }'; }
 
 flags="$(setting_of PROMPTER_FLAGS)"
 team="$(setting_of PROMPTER_STORE_TEAM)"
@@ -93,7 +93,7 @@ fi
 
 if [ "$PLATFORM" = mac ]; then
   APP="$DD/Build/Products/$CONFIG/Prompter.app"
-elif [ -d "$DD/Build/Products/$CONFIG-iphonesimulator/Prompter.app" ] && xcrun simctl list devices | grep -qF "$UDID"; then
+elif [ -d "$DD/Build/Products/$CONFIG-iphonesimulator/Prompter.app" ] && grep -qF "$UDID" <<<"$(xcrun simctl list devices)"; then
   APP="$DD/Build/Products/$CONFIG-iphonesimulator/Prompter.app"
 else
   APP="$DD/Build/Products/$CONFIG-iphoneos/Prompter.app"
