@@ -455,9 +455,53 @@ struct PrompterOrientationPolicyTests {
         _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft)
         _ = policy.windowChanged(to: .cover, current: .landscapeLeft)
         #expect(policy.lastSide == .landscapeLeft)
-        // A fold mid-take doesn't change it either way.
-        _ = policy.windowChanged(to: .inner, current: .portraitUpsideDown)
+        // A fold mid-take doesn't change it either way. (The cover's landscape left is upside down on the inner screen,
+        // which a phone app doesn't support, so the lock stays: see the next test.)
+        #expect(policy.windowChanged(to: .inner, current: .portraitUpsideDown) == .none)
+        #expect(policy.mask == .landscapeLeft)
         #expect(policy.lastSide == .landscapeLeft)
+    }
+
+    /// The finding (code reading): the supported-orientation check ran only for the cover, so unfolding a take locked to
+    /// landscape left on the cover set the mask to upside down alone, which an iPhone app never declares (no orientation
+    /// in common with its view controllers). Folding back from the inner screen in landscape right then left that mask in
+    /// force on the cover. The lock now stays as it was on both screens, and the fold back still maps from what the inner
+    /// screen really showed.
+    @Test func unfoldingFromTheCoversLandscapeLeftKeepsASupportedLock() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        #expect(policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft) == .rotate(.landscapeLeft))
+        #expect(policy.windowChanged(to: .cover, current: .landscapeLeft) == .none)
+        // Unfolded: upside down on the inner screen would keep the direction, but a phone app can't have it.
+        #expect(policy.windowChanged(to: .inner, current: .landscapeRight) == .none)
+        #expect(policy.mask == .landscapeLeft)
+        #expect(policy.orientationOnScreen == .landscapeRight)
+        // Folded back: the inner screen's landscape right is upside down on the cover too, so the lock still stays.
+        #expect(policy.windowChanged(to: .cover, current: .landscapeLeft) == .none)
+        #expect(policy.mask == .landscapeLeft)
+        // Back on the screen it opened on: closing restores as usual.
+        #expect(policy.prompterClosed() == .rotate(.landscapeLeft))
+        #expect(policy.mask == .allButUpsideDown)
+    }
+
+    /// Whatever the hold on either screen, a fold or an unfold mid-take never leaves the app with an orientation it doesn't
+    /// support, and never asks for one.
+    @Test(arguments: [UIInterfaceOrientation.landscapeLeft, .landscapeRight])
+    func foldsNeverLockAnUnsupportedOrientation(coverSide: UIInterfaceOrientation) {
+        let holds: [UIInterfaceOrientation] = [.portrait, .landscapeLeft, .portraitUpsideDown, .landscapeRight]
+        for innerHold in holds {
+            for coverHold in holds {
+                var policy = Policy(defaultMask: .allButUpsideDown)
+                var actions = [policy.prompterOpened(landscapeOnly: true, current: coverSide)]
+                actions.append(policy.windowChanged(to: .cover, current: coverSide))
+                actions.append(policy.windowChanged(to: .inner, current: innerHold))
+                actions.append(policy.windowChanged(to: .cover, current: coverHold))
+                actions.append(policy.windowChanged(to: .inner, current: innerHold))
+                #expect(policy.defaultMask.contains(policy.mask), "inner \(innerHold.rawValue), cover \(coverHold.rawValue)")
+                for case .rotate(let requested) in actions {
+                    #expect(policy.defaultMask.contains(requested), "inner \(innerHold.rawValue), cover \(coverHold.rawValue)")
+                }
+            }
+        }
     }
 
     /// The finding: Split View on the inner screen (a 475 pt wide window) read as a fold to the cover. A small window with

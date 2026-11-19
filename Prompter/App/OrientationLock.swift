@@ -252,9 +252,11 @@ struct PrompterOrientationPolicy: Equatable, Sendable {
 
     /// Foldables: the prompter's window is now on `newScreen`, showing `current` (also when only `current` changed: the
     /// inner screen turning over with the device). On a change of screen while locked, the lock turns to the orientation
-    /// that keeps the text's direction (see the type's notes); when that isn't one the app supports (upside down on the
-    /// cover), the lock stays as it was. A nil screen (see `Screen.from`) changes nothing, not even the orientation on
-    /// record, which may belong to the other screen by then.
+    /// that keeps the text's direction (see the type's notes); when that isn't one the app supports (upside down, on a
+    /// phone), the lock stays as it was, on either screen: a mask the app doesn't support has nothing in common with its
+    /// view controllers, and UIKit can answer that with an exception. The inner screen ignores the lock anyway, and the
+    /// orientation it shows is still recorded, so a fold back maps from that. A nil screen (see `Screen.from`) changes
+    /// nothing, not even the orientation on record, which may belong to the other screen by then.
     mutating func windowChanged(to newScreen: Screen?, current: UIInterfaceOrientation?) -> Action {
         guard let newScreen else {
             // Opened with the device open but the window small (Split View on the inner screen, say): not the closed
@@ -278,7 +280,7 @@ struct PrompterOrientationPolicy: Equatable, Sendable {
         guard let previous, newScreen != previous, isLocked, let previousOrientation,
               let target = Self.mask(for: Self.sameDirection(as: previousOrientation, from: previous, to: newScreen))
         else { return .none }
-        if newScreen == .cover, !defaultMask.contains(target) { return .none }
+        guard defaultMask.contains(target) else { return .none }
         mask = target
         return .rotate(target)
     }
