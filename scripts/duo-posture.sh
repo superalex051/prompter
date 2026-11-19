@@ -52,11 +52,24 @@ const action = str(env.objectForKey("AXACTION"));
 if (!$.AXIsProcessTrusted()) fail("This terminal has no Accessibility permission (System Settings > Privacy & Security > Accessibility).");
 
 const app = $.AXUIElementCreateApplication(pid);
-const windows = attr(app, "AXWindows");
-if (!windows || Number(windows.count) === 0) fail("Device Hub shows no window.");
-const win = windows.objectAtIndex(0);
+// Device Hub's window list can briefly hold a helper window (titled "Device Hub") while a simulator rotates, so the
+// window is looked up by title every time, and a check waits up to 5 seconds for the Duo's window to come back.
+function windows() {
+  const list = attr(app, "AXWindows"); const out = [];
+  if (list) for (let i = 0; i < list.count; i++) out.push(list.objectAtIndex(i));
+  return out;
+}
+const isDuoTitle = t => t === duo || t.startsWith(duo + " ");
+function duoWindow() { return windows().find(w => isDuoTitle(str(attr(w, "AXTitle")))) || null; }
+function anyWindow() { return duoWindow() || attr(app, "AXMainWindow") || windows()[0] || null; }
+function waitForDuo(seconds) {
+  for (let i = 0; i < seconds * 4 && !duoWindow(); i++) delay(0.25);
+  return duoWindow();
+}
+let win = anyWindow();
+if (!win) fail("Device Hub shows no window.");
 const title = () => str(attr(win, "AXTitle"));
-const showsDuo = () => title() === duo || title().startsWith(duo + " ");
+const showsDuo = () => { const w = duoWindow(); if (w) win = w; return w !== null; };
 
 // The sidebar row for the Duo: the row whose text is exactly its name. Its image describes the posture ("v68_Closed").
 function duoRow() {
@@ -65,7 +78,19 @@ function duoRow() {
     return find(el, t => str(attr(t, "AXRole")) === "AXStaticText" && str(attr(t, "AXValue")) === duo, 0) !== null;
   }, 0);
 }
+// The posture: the selected one of Device Hub's Closed / Book / Open controls when they show it, else the sidebar
+// row's image ("v68_Closed"), which Device Hub does not always refresh.
 function posture() {
+  const names = ["Closed", "Book", "Open"];
+  let picked = "";
+  find(win, el => {
+    const role = str(attr(el, "AXRole"));
+    if (role !== "AXRadioButton" && role !== "AXCheckBox" && role !== "AXButton") return false;
+    const name = names.find(n => str(attr(el, "AXTitle")) === n || str(attr(el, "AXDescription")) === n);
+    if (name && (str(attr(el, "AXValue")) === "1" || str(attr(el, "AXSelected")) === "true")) { picked = name; return true; }
+    return false;
+  }, 0);
+  if (picked) return picked;
   const row = duoRow();
   if (!row) return "";
   const image = find(row, el => str(attr(el, "AXRole")) === "AXImage", 0);
@@ -74,10 +99,10 @@ function posture() {
   return m ? m[1] : d;
 }
 
-if (action === "state") { console.log(posture() || "unknown"); $.exit(0); }
+if (action === "state") { waitForDuo(5); console.log(posture() || "unknown"); $.exit(0); }
 
 if (action === "select") {
-  if (showsDuo()) { console.log("Device Hub shows " + title()); $.exit(0); }
+  if (waitForDuo(2)) { console.log("Device Hub shows " + title()); $.exit(0); }
   const row = duoRow();
   if (!row) fail("Device Hub lists no device named '" + duo + "'.");
   $.AXUIElementSetAttributeValue(row, "AXSelected", $.NSNumber.numberWithBool(true));
@@ -88,7 +113,7 @@ if (action === "select") {
 }
 
 // A posture press: only ever on the Duo.
-if (!showsDuo()) fail("Device Hub shows '" + title() + "', not '" + duo + "'. Run: scripts/duo-posture.sh select");
+if (!waitForDuo(5)) fail("Device Hub shows '" + title() + "', not '" + duo + "'. Run: scripts/duo-posture.sh select");
 const button = find(win, el => {
   const role = str(attr(el, "AXRole"));
   if (role !== "AXButton" && role !== "AXRadioButton" && role !== "AXCheckBox") return false;

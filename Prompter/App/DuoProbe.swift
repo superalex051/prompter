@@ -14,12 +14,19 @@ struct DuoProbeModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                GeometryReader { proxy in
-                    let line = DuoProbe.describe(proxy, horizontal: horizontalSizeClass, vertical: verticalSizeClass)
-                    Color.clear
-                        .onChange(of: line, initial: true) { _, line in DuoProbe.log(line) }
+                // The outer reader keeps the safe area, so its insets are the real ones; the inner one ignores it and
+                // measures the whole window (a reader that ignores the safe area reports zero insets).
+                GeometryReader { safe in
+                    let insets = safe.safeAreaInsets
+                    GeometryReader { proxy in
+                        let line = DuoProbe.describe(
+                            proxy, safeInsets: insets, horizontal: horizontalSizeClass, vertical: verticalSizeClass
+                        )
+                        Color.clear
+                            .onChange(of: line, initial: true) { _, line in DuoProbe.log(line) }
+                    }
+                    .ignoresSafeArea()
                 }
-                .ignoresSafeArea()
             }
             .modifier(DuoProbeHingeModifier())
             .onChange(of: scenePhase, initial: true) { _, phase in DuoProbe.log("phase \(phase)") }
@@ -44,8 +51,10 @@ private struct DuoProbeHingeModifier: ViewModifier {
 
 @MainActor
 enum DuoProbe {
-    static func describe(_ proxy: GeometryProxy, horizontal: UserInterfaceSizeClass?, vertical: UserInterfaceSizeClass?) -> String {
-        let s = proxy.size, i = proxy.safeAreaInsets
+    static func describe(
+        _ proxy: GeometryProxy, safeInsets i: EdgeInsets, horizontal: UserInterfaceSizeClass?, vertical: UserInterfaceSizeClass?
+    ) -> String {
+        let s = proxy.size
         var parts = [
             "size \(Int(s.width))x\(Int(s.height))",
             "safe t\(Int(i.top)) l\(Int(i.leading)) b\(Int(i.bottom)) r\(Int(i.trailing))",
