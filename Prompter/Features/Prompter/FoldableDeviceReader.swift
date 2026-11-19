@@ -21,7 +21,7 @@ extension GeometryProxy {
     /// The reserved regions over this view that are ACTIVE right now, in its coordinates, margins included: the fold while
     /// the device is partly folded (Book), the cover's camera. The fold of a device lying flat is inactive, so it isn't
     /// here. None before iOS 27.1, and none on a device without a fold or a camera in the screen.
-    var activeReservedRects: [CGRect] {
+    @MainActor var activeReservedRects: [CGRect] {
         if #available(iOS 27.1, *) {
             // Asked for inactive ones too (the call DuoProbe makes), then only the active ones are kept.
             let regions = Array(reservedRegions(kind: .division, options: .includeInactive))
