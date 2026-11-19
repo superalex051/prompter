@@ -31,8 +31,8 @@ struct EditorView: View {
 }
 
 /// Holds `EditorKeyboard` for the library and its editors. A plain reference that SwiftUI doesn't observe, on purpose:
-/// the editor reports every focus change here, and as view state those reports redrew the whole library each time the
-/// keyboard came up, which on iPhone cleared the keyboard's word suggestions and moved the editor's scroll.
+/// the editor reports every focus change here, and the library has no reason to redraw for them. Only a layout switch
+/// reads it.
 @MainActor
 final class EditorKeyboardHandoff {
     var state = EditorKeyboard()
