@@ -55,6 +55,21 @@ struct PrompterScreen: View {
     }
 }
 
+/// The canvas's share of `PrompterAvoidance`: the active fold and camera in canvas points, the way back to the screen
+/// (to break ties towards the screen's trailing side, whatever the mirror), and the countdown digit's area. All empty
+/// unless something is in the way, so the canvas lays out exactly as it always has on iPhone and iPad.
+private struct CanvasAvoidance {
+    var blocks: [CGRect] = []
+    var toScreen: CGAffineTransform = .identity
+    var countdownArea: CGRect?
+}
+
+/// What the orientation lock hears about the prompter's window.
+private struct WindowReport: Equatable {
+    var size: CGSize
+    var isFoldable: Bool
+}
+
 /// Everything on screen once the controller exists.
 private struct PrompterStage: View {
     let controller: PrompterController
@@ -80,7 +95,13 @@ private struct PrompterStage: View {
         @Bindable var settingsStore = settingsStore
 
         GeometryReader { proxy in
-            transformedCanvas(screenSize: proxy.size)
+            // Only a foldable steps around the fold and its camera: an iPhone on iOS 27.1 reports its Dynamic Island as
+            // a reserved region too, and its prompter must stay exactly as it is.
+            transformedCanvas(screenSize: proxy.size, avoiding: isFoldable ? proxy.activeReservedRects : [])
+                // A fold moves the window to the other screen; the orientation lock follows (foldables only).
+                .onChange(of: WindowReport(size: proxy.size, isFoldable: isFoldable), initial: true) { _, report in
+                    OrientationLock.windowChanged(size: report.size, isFoldable: report.isFoldable)
+                }
         }
         .ignoresSafeArea()
         .overlay(alignment: .topLeading) { closeButton }
@@ -128,24 +149,38 @@ private struct PrompterStage: View {
     // MARK: Canvas
 
     /// The canvas, rotated (for 90°/270° its frame swaps width and height first), then mirrored/flipped, as one unit.
-    private func transformedCanvas(screenSize: CGSize) -> some View {
+    /// `blocks`: the active fold and the camera, in screen points (see `PrompterAvoidance`); empty on iPhone and iPad.
+    private func transformedCanvas(screenSize: CGSize, avoiding blocks: [CGRect]) -> some View {
         let rotation = settings.rotation
-        let canvasSize = PrompterCanvasTransform.isSideways(rotation)
-            ? CGSize(width: screenSize.height, height: screenSize.width)
-            : screenSize
+        let canvasSize = PrompterCanvasTransform.canvasSize(rotation: rotation, screenSize: screenSize)
         let transform = PrompterCanvasTransform.make(
             rotation: rotation,
             mirror: settings.mirrorHorizontal,
             flip: settings.flipVertical,
             canvasSize: canvasSize
         )
-        return canvas(size: canvasSize)
+        return canvas(size: canvasSize, avoidance: canvasAvoidance(screenSize: screenSize, blocks: blocks))
             .frame(width: canvasSize.width, height: canvasSize.height)
             .transformEffect(transform)
             .frame(width: screenSize.width, height: screenSize.height)
     }
 
-    private func canvas(size: CGSize) -> some View {
+    /// The fold and the camera brought into canvas points, and where the countdown digit goes.
+    private func canvasAvoidance(screenSize: CGSize, blocks: [CGRect]) -> CanvasAvoidance {
+        guard !blocks.isEmpty else { return CanvasAvoidance() }
+        let toScreen = PrompterCanvasTransform.canvasToScreen(
+            rotation: settings.rotation, mirror: settings.mirrorHorizontal, flip: settings.flipVertical,
+            screenSize: screenSize
+        )
+        let toCanvas = toScreen.inverted()
+        return CanvasAvoidance(
+            blocks: blocks.map { $0.applying(toCanvas) },
+            toScreen: toScreen,
+            countdownArea: PrompterAvoidance.countdownArea(screen: screenSize, blocks: blocks)?.applying(toCanvas)
+        )
+    }
+
+    private func canvas(size: CGSize, avoidance: CanvasAvoidance) -> some View {
         let style = PrompterTextStyle(settings: settings, canvasSize: size, isPad: PrompterTextView.scalesFont(canvasSize: size))
         let foreground = Color(settings.scheme.foregroundUIColor)
         let background = Color(settings.scheme.backgroundUIColor)
@@ -177,14 +212,20 @@ private struct PrompterStage: View {
                 background: background,
                 accent: accent,
                 horizontalInset: hudInset,
-                fontSize: min(max(shortSide * 0.042, 15), 28)
+                fontSize: min(max(shortSide * 0.042, 15), 28),
+                avoiding: avoidance.blocks,
+                toScreen: avoidance.toScreen
             )
             .frame(maxHeight: .infinity, alignment: .bottom)
             .allowsHitTesting(false)
 
-            CountdownOverlay(engine: engine, foreground: foreground, background: background, canvasSize: size)
-                .allowsHitTesting(false)
+            CountdownOverlay(
+                engine: engine, foreground: foreground, background: background, canvasSize: size,
+                digitArea: avoidance.countdownArea
+            )
+            .allowsHitTesting(false)
         }
+        .coordinateSpace(.named(PrompterHUD.canvasSpace))
         .background(background)
     }
 
@@ -219,8 +260,20 @@ private struct PrompterStage: View {
 
     /// Out of the view tree while hidden, not just transparent: the faded-out button used to stay in the accessibility
     /// tree even with `accessibilityHidden` (UI tests still found it while the text played), so VoiceOver could land on an
-    /// invisible control.
+    /// invisible control. It sits 12 pt inside the safe area's top leading corner, and steps off an active fold or the
+    /// camera if one is there (`PrompterAvoidance.buttonOffset`), read in the same safe-area coordinates.
     private var closeButton: some View {
+        GeometryReader { proxy in
+            closeButtonContent
+                .offset(PrompterAvoidance.buttonOffset(
+                    button: CGRect(x: 12, y: 12, width: 44, height: 44),
+                    screen: proxy.size,
+                    blocks: isFoldable ? proxy.activeReservedRects : []
+                ))
+        }
+    }
+
+    private var closeButtonContent: some View {
         ZStack(alignment: .topLeading) {
             if showsCloseButton {
                 Button(action: close) {

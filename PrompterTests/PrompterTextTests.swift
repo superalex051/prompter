@@ -379,6 +379,108 @@ struct PrompterOrientationPolicyTests {
         #expect(policy.mask == .all)
     }
 
+    // MARK: Foldables (iPhone Duo)
+
+    @Test(arguments: [
+        (CGSize(width: 466, height: 678), PrompterOrientationPolicy.Screen.cover),
+        (CGSize(width: 678, height: 466), .cover),
+        (CGSize(width: 382, height: 678), .cover),      // half way through an unfold
+        (CGSize(width: 951, height: 669), .inner),
+        (CGSize(width: 669, height: 951), .inner),
+    ])
+    func screenFromTheWindow(size: CGSize, screen: PrompterOrientationPolicy.Screen) {
+        #expect(Policy.Screen(windowSize: size) == screen)
+    }
+
+    /// Measured on the simulator, for one hold of the device: cover portrait with the inner screen's landscape left, cover
+    /// landscape left with its portrait upside down. The other two follow the same quarter turn.
+    @Test func sameDirectionOnTheOtherScreen() {
+        #expect(Policy.sameDirection(as: .portrait, from: .cover, to: .inner) == .landscapeLeft)
+        #expect(Policy.sameDirection(as: .landscapeLeft, from: .cover, to: .inner) == .portraitUpsideDown)
+        #expect(Policy.sameDirection(as: .landscapeRight, from: .cover, to: .inner) == .portrait)
+        #expect(Policy.sameDirection(as: .landscapeLeft, from: .inner, to: .cover) == .portrait)
+        #expect(Policy.sameDirection(as: .portraitUpsideDown, from: .inner, to: .cover) == .landscapeLeft)
+        #expect(Policy.sameDirection(as: .landscapeRight, from: .cover, to: .cover) == .landscapeRight)
+        for orientation in [UIInterfaceOrientation.portrait, .landscapeLeft, .portraitUpsideDown, .landscapeRight] {
+            let there = Policy.sameDirection(as: orientation, from: .cover, to: .inner)
+            #expect(Policy.sameDirection(as: there, from: .inner, to: .cover) == orientation)
+        }
+    }
+
+    /// The finding (code reading, then the probe): a take open in the rig locks the inner screen's landscape left. Folding
+    /// kept that lock, and the cover, which does follow the lock, showed the text a quarter turn from where it was. Now the
+    /// cover turns to the orientation that keeps the text's direction: portrait.
+    @Test func foldingAnOpenTakeKeepsTheTextsDirection() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        #expect(policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft) == .rotate(.landscapeLeft))
+        #expect(policy.windowChanged(to: .inner, current: .landscapeLeft) == .none)
+        // Book posture, Rotate Right on the open screen: still the inner screen, nothing to do.
+        #expect(policy.windowChanged(to: .inner, current: .landscapeLeft) == .none)
+        #expect(policy.windowChanged(to: .cover, current: .landscapeLeft) == .rotate(.portrait))
+        #expect(policy.mask == .portrait)
+        #expect(policy.isLocked)
+        #expect(policy.lastSide == .landscapeLeft)            // the next take still starts on the side the last lock used
+    }
+
+    /// The inner screen ignores the app's orientations (measured: locked to landscape right, it showed landscape left). On
+    /// an unfold the policy asks once for the same direction and then takes what the inner screen shows.
+    @Test func unfoldingAsksOnceThenAcceptsTheInnerScreen() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        #expect(policy.prompterOpened(landscapeOnly: true, current: .portrait) == .rotate(.landscapeRight))
+        #expect(policy.windowChanged(to: .cover, current: .landscapeRight) == .none)
+        #expect(policy.windowChanged(to: .inner, current: .landscapeLeft) == .rotate(.portrait))
+        // Ignored: the inner screen stays wide. No second request.
+        #expect(policy.windowChanged(to: .inner, current: .landscapeLeft) == .none)
+        // Folded again: the cover takes the direction the inner screen really showed.
+        #expect(policy.windowChanged(to: .cover, current: .portrait) == .rotate(.portrait))
+    }
+
+    @Test func closingAfterAFoldOnlyRelaxesTheLock() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft)
+        _ = policy.windowChanged(to: .inner, current: .landscapeLeft)
+        _ = policy.windowChanged(to: .cover, current: .landscapeLeft)
+        // The orientation from before the prompter was the inner screen's: not restored on the cover.
+        #expect(policy.prompterClosed() == .refresh)
+        #expect(policy.mask == .allButUpsideDown)
+        #expect(policy.prompterClosed() == .none)
+    }
+
+    @Test func closingBackOnTheFirstScreenStillRestores() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        _ = policy.prompterOpened(landscapeOnly: true, current: .portrait)
+        _ = policy.windowChanged(to: .cover, current: .landscapeRight)
+        _ = policy.windowChanged(to: .inner, current: .landscapeLeft)
+        _ = policy.windowChanged(to: .cover, current: .portrait)
+        #expect(policy.prompterClosed() == .rotate(.portrait))
+    }
+
+    @Test func withoutTheLockAFoldChangesNothing() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        #expect(policy.prompterOpened(landscapeOnly: false, current: .portrait) == .none)
+        #expect(policy.windowChanged(to: .cover, current: .portrait) == .none)
+        #expect(policy.windowChanged(to: .inner, current: .landscapeLeft) == .none)
+        #expect(policy.windowChanged(to: .cover, current: .portrait) == .none)
+        #expect(policy.mask == .allButUpsideDown)
+        #expect(policy.prompterClosed() == .none)
+    }
+
+    @Test func upsideDownOnTheCoverKeepsTheLock() {
+        // The inner screen in landscape right matches the cover upside down, which an iPhone app doesn't support.
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeRight)
+        _ = policy.windowChanged(to: .inner, current: .landscapeRight)
+        #expect(policy.windowChanged(to: .cover, current: .landscapeRight) == .none)
+        #expect(policy.mask == .landscapeRight)
+    }
+
+    @Test func outsideThePrompterWindowsOnlyRecord() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        #expect(policy.windowChanged(to: .cover, current: .portrait) == .none)
+        #expect(policy.windowChanged(to: .inner, current: .landscapeLeft) == .none)
+        #expect(policy.mask == .allButUpsideDown)
+    }
+
     @Test func aSecondOpenKeepsTheFirstRestorePoint() {
         var policy = Policy(defaultMask: .allButUpsideDown)
         _ = policy.prompterOpened(landscapeOnly: true, current: .portrait)
@@ -428,5 +530,38 @@ struct PrompterCanvasTransformTests {
         #expect(PrompterCanvasTransform.isSideways(.threeQuarters))
         #expect(!PrompterCanvasTransform.isSideways(.none))
         #expect(!PrompterCanvasTransform.isSideways(.half))
+    }
+
+    // MARK: Screen and canvas points (the fold and the camera are reported in screen points)
+
+    private func toScreen(_ rotation: PrompterSettings.Rotation, mirror: Bool = false, flip: Bool = false,
+                          screen: CGSize = CGSize(width: 951, height: 669)) -> CGAffineTransform {
+        PrompterCanvasTransform.canvasToScreen(rotation: rotation, mirror: mirror, flip: flip, screenSize: screen)
+    }
+
+    @Test func canvasToScreenIsIdentityWithoutTurnsAndMirrorsAboutTheMiddle() {
+        #expect(toScreen(.none) == .identity)
+        // The open Duo's fold (x 455…495) is centred, so mirroring maps it onto itself, give or take a point.
+        let fold = CGRect(x: 455, y: 0, width: 40, height: 669)
+        let inCanvas = fold.applying(toScreen(.none, mirror: true).inverted())
+        #expect(inCanvas == CGRect(x: 456, y: 0, width: 40, height: 669))
+        // An off-centre rect lands on the other side.
+        #expect(CGRect(x: 0, y: 0, width: 66, height: 66).applying(toScreen(.none, mirror: true).inverted())
+            == CGRect(x: 885, y: 0, width: 66, height: 66))
+    }
+
+    @Test func aSidewaysCanvasCoversTheScreenExactly() {
+        let screen = CGSize(width: 951, height: 669)
+        for rotation in [PrompterSettings.Rotation.quarter, .threeQuarters] {
+            let canvas = PrompterCanvasTransform.canvasSize(rotation: rotation, screenSize: screen)
+            #expect(canvas == CGSize(width: 669, height: 951))
+            let covered = CGRect(origin: .zero, size: canvas).applying(toScreen(rotation, screen: screen))
+            #expect(covered == CGRect(origin: .zero, size: screen))
+        }
+        // A quarter turn is clockwise: the canvas's top left corner is the screen's top right.
+        #expect(CGPoint.zero.applying(toScreen(.quarter, screen: screen)) == CGPoint(x: 951, y: 0))
+        // So a vertical fold on the screen is a band across the sideways canvas (screen x is 951 minus canvas y).
+        let fold = CGRect(x: 455, y: 0, width: 40, height: 669).applying(toScreen(.quarter, screen: screen).inverted())
+        #expect(fold == CGRect(x: 0, y: 456, width: 669, height: 40))
     }
 }

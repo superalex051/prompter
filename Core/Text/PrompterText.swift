@@ -338,4 +338,26 @@ enum PrompterCanvasTransform {
     static func isSideways(_ rotation: PrompterSettings.Rotation) -> Bool {
         rotation == .quarter || rotation == .threeQuarters
     }
+
+    /// The canvas for a screen of `screenSize`: the screen itself, with width and height swapped for 90° and 270°.
+    static func canvasSize(rotation: PrompterSettings.Rotation, screenSize: CGSize) -> CGSize {
+        isSideways(rotation) ? CGSize(width: screenSize.height, height: screenSize.width) : screenSize
+    }
+
+    /// Canvas points to screen points: the canvas sits centred on the screen (so a sideways canvas starts off screen)
+    /// and `make(...)` turns it about its centre. Use `.inverted()` to bring screen rects, such as the fold or the
+    /// camera, into the canvas, where the countdown and the HUD are laid out.
+    static func canvasToScreen(
+        rotation: PrompterSettings.Rotation,
+        mirror: Bool,
+        flip: Bool,
+        screenSize: CGSize
+    ) -> CGAffineTransform {
+        let canvas = canvasSize(rotation: rotation, screenSize: screenSize)
+        return make(rotation: rotation, mirror: mirror, flip: flip, canvasSize: canvas)
+            .concatenating(CGAffineTransform(
+                translationX: (screenSize.width - canvas.width) / 2,
+                y: (screenSize.height - canvas.height) / 2
+            ))
+    }
 }

@@ -43,6 +43,16 @@ enum OrientationLock {
         apply(policy.prompterClosed(), in: activeWindowScene)
     }
 
+    /// The prompter's window changed size. On a device that folds (iPhone Duo) this is how a fold reaches the lock: the
+    /// window moving between the cover and the inner screen. Anywhere else it does nothing, so a resized iPad window or a
+    /// rotated iPhone never takes this path.
+    static func windowChanged(size: CGSize, isFoldable: Bool) {
+        guard isFoldable, size.width > 0, size.height > 0 else { return }
+        let scene = activeWindowScene
+        let screen = PrompterOrientationPolicy.Screen(windowSize: size)
+        apply(policy.windowChanged(to: screen, current: scene?.effectiveGeometry.interfaceOrientation), in: scene)
+    }
+
     // MARK: Private
 
     private static var activeWindowScene: UIWindowScene? {
@@ -110,7 +120,28 @@ enum OrientationLock {
 /// - Turning it off mid-take only relaxes the mask; turning it on again locks to the side the interface has then.
 /// - Closing restores the orientation from before the prompter, if the interface is still locked (otherwise it already
 ///   follows the device).
+/// - On a device that folds (iPhone Duo), folding or unfolding mid-take moves the window to the other screen, and the
+///   same hold of the device is a quarter turn apart on the two screens (the cover's portrait is the inner screen's
+///   landscape). A lock kept as it was would turn the text 90 degrees to the presenter, so on a screen change the lock
+///   moves to the orientation that keeps the text's direction (`sameDirection`). The cover follows it. The inner screen
+///   doesn't follow an app's orientations (measured on the simulator; Apple says so too), so there the request is made
+///   once and whatever the inner screen shows is accepted. Closing after a screen change only relaxes the lock: the
+///   orientation from before the prompter belonged to the other screen.
 struct PrompterOrientationPolicy: Equatable, Sendable {
+    /// Which screen of a foldable the window is on.
+    enum Screen: Equatable, Sendable {
+        /// The outer screen (folded), 466 x 678 on iPhone Duo.
+        case cover
+        /// The inner screen (open), 951 x 669.
+        case inner
+
+        /// From the window: the inner screen is the one whose short side is at least
+        /// `PrompterTextStyle.largeCanvasShortSide` (the same line the text size uses). Only asked on a foldable.
+        init(windowSize: CGSize) {
+            self = min(windowSize.width, windowSize.height) >= PrompterTextStyle.largeCanvasShortSide ? .inner : .cover
+        }
+    }
+
     enum Action: Equatable, Sendable {
         /// Nothing to do.
         case none
@@ -129,6 +160,12 @@ struct PrompterOrientationPolicy: Equatable, Sendable {
     private(set) var isPrompterOpen = false
     /// The interface orientation when the prompter opened, restored when it closes.
     private(set) var orientationBeforePrompter: UIInterfaceOrientation?
+    /// Foldables: the screen the window is on, and the interface orientation last seen there (nil until the window is
+    /// first reported during this take).
+    private(set) var screen: Screen?
+    private(set) var orientationOnScreen: UIInterfaceOrientation?
+    /// Foldables: the screen the prompter opened on, so closing restores only an orientation captured on this screen.
+    private(set) var screenAtOpen: Screen?
 
     init(defaultMask: UIInterfaceOrientationMask, lastSide: UIInterfaceOrientation? = nil) {
         self.defaultMask = defaultMask
@@ -136,7 +173,7 @@ struct PrompterOrientationPolicy: Equatable, Sendable {
         self.lastSide = lastSide
     }
 
-    /// Locked to a single landscape side.
+    /// Locked to a single orientation: a landscape side, or on a foldable whatever keeps the text's direction after a fold.
     var isLocked: Bool { mask != defaultMask }
 
     mutating func prompterOpened(landscapeOnly: Bool, current: UIInterfaceOrientation?) -> Action {
@@ -144,6 +181,7 @@ struct PrompterOrientationPolicy: Equatable, Sendable {
         guard !isPrompterOpen else { return landscapeOnlyChanged(landscapeOnly, current: current) }
         isPrompterOpen = true
         orientationBeforePrompter = current
+        screenAtOpen = screen
         return landscapeOnly ? lock(current: current) : .none
     }
 
@@ -162,9 +200,49 @@ struct PrompterOrientationPolicy: Equatable, Sendable {
         isPrompterOpen = false
         let before = orientationBeforePrompter
         orientationBeforePrompter = nil
+        let sameScreen = screen == screenAtOpen
+        screen = nil
+        orientationOnScreen = nil
+        screenAtOpen = nil
         guard isLocked else { return .none }
         mask = defaultMask
+        // Folded or unfolded since the prompter opened: the orientation from before was the other screen's.
+        guard sameScreen else { return .refresh }
         return .rotate(before.flatMap(Self.mask(for:)) ?? .portrait)
+    }
+
+    /// Foldables: the prompter's window is now on `newScreen`, showing `current`. On a change of screen while locked, the
+    /// lock turns to the orientation that keeps the text's direction (see the type's notes); when that isn't one the app
+    /// supports (upside down on the cover), the lock stays as it was.
+    mutating func windowChanged(to newScreen: Screen, current: UIInterfaceOrientation?) -> Action {
+        let previous = screen
+        let previousOrientation = orientationOnScreen
+        screen = newScreen
+        if let current, current != .unknown { orientationOnScreen = current }
+        guard isPrompterOpen else { return .none }
+        if screenAtOpen == nil { screenAtOpen = previous ?? newScreen }
+        guard let previous, newScreen != previous, isLocked, let previousOrientation,
+              let target = Self.mask(for: Self.sameDirection(as: previousOrientation, from: previous, to: newScreen))
+        else { return .none }
+        if newScreen == .cover, !defaultMask.contains(target) { return .none }
+        mask = target
+        return .rotate(target)
+    }
+
+    /// The orientation on screen `to` that shows text in the same direction, for the same hold of the device, as
+    /// `orientation` on screen `from`. Measured on the iPhone Duo simulator: the cover's portrait is the inner screen's
+    /// landscape left, and the cover's landscape left is the inner screen's portrait upside down; the other two follow
+    /// the same quarter turn.
+    static func sameDirection(as orientation: UIInterfaceOrientation, from: Screen, to: Screen) -> UIInterfaceOrientation {
+        guard from != to else { return orientation }
+        let coverToInner: [UIInterfaceOrientation: UIInterfaceOrientation] = [
+            .portrait: .landscapeLeft,
+            .landscapeLeft: .portraitUpsideDown,
+            .portraitUpsideDown: .landscapeRight,
+            .landscapeRight: .portrait,
+        ]
+        if to == .inner { return coverToInner[orientation] ?? orientation }
+        return coverToInner.first { $0.value == orientation }?.key ?? orientation
     }
 
     /// The side to lock to: `current` if it is a landscape side, else `last` if it is one, else landscape right.
