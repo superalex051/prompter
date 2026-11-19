@@ -91,6 +91,13 @@ struct LaunchOptionsTests {
         #expect(LaunchOptions(arguments: ["-landscapeOnly", "-demoData"]).landscapeOnly == true)
     }
 
+    @Test func landscapeSide() {
+        #expect(LaunchOptions(arguments: []).landscapeSide == nil)
+        #expect(LaunchOptions(arguments: ["-landscapeSide", "left"]).landscapeSide == .left)
+        #expect(LaunchOptions(arguments: ["landscapeSide", "Right", "-demoData"]).landscapeSide == .right)
+        #expect(LaunchOptions(arguments: ["-landscapeSide", "up"]).landscapeSide == nil)
+    }
+
     @Test func unrelatedArgumentsAreIgnored() {
         let options = LaunchOptions(arguments: ["/path/Prompter", "-foo", "bar", "demo", "route2"])
         #expect(options == LaunchOptions(arguments: []))

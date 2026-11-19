@@ -47,6 +47,14 @@ struct LaunchOptions: Equatable, Sendable {
     /// "-landscapeOnly NO" (or YES): with `-demoData`, the prompter opens with "Landscape only" set this way (the throwaway
     /// settings start with it on). Used to check the prompter on a foldable with the lock off. nil: the setting as it is.
     var landscapeOnly: Bool?
+    /// "-landscapeSide left" (or right): with `-demoData`, the throwaway side store starts with that landscape side
+    /// remembered, so a take opened from portrait locks to it. Used to shoot the other side of a phone held upright (a
+    /// foldable's camera lands on the other corner). nil: nothing remembered, so the lock picks landscape right.
+    var landscapeSide: LandscapeSide?
+
+    enum LandscapeSide: String, Sendable, CaseIterable {
+        case left, right
+    }
 
     init(arguments: [String] = LaunchArguments.process) {
         if let value = Self.value(after: "route", in: arguments), let route = Route(rawValue: value.lowercased()) {
@@ -66,6 +74,9 @@ struct LaunchOptions: Equatable, Sendable {
         duoProbe = Self.flag("duoProbe", in: arguments)
         if LaunchArguments.flagIndex("landscapeOnly", in: arguments) != nil {
             landscapeOnly = Self.flag("landscapeOnly", in: arguments)
+        }
+        if let value = Self.value(after: "landscapeSide", in: arguments) {
+            landscapeSide = LandscapeSide(rawValue: value.lowercased())
         }
     }
 

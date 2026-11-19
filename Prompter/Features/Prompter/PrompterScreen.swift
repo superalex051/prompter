@@ -30,7 +30,7 @@ struct PrompterScreen: View {
 
     private func open() {
         guard controller == nil else { return }
-        Self.applyLaunchLandscapeOnly(to: settingsStore)
+        Self.applyLaunchOrientationOptions(to: settingsStore)
         let script = scriptStore.script(id: scriptID)
         let controller = PrompterController(
             scriptTitle: script?.displayTitle ?? "Untitled",
@@ -43,15 +43,17 @@ struct PrompterScreen: View {
     }
 
     /// `-demoData -landscapeOnly NO` (screenshots, foldable checks): the first prompter of the launch opens with "Landscape
-    /// only" set that way. Only the throwaway demo settings are touched, and only once, so a later toggle by hand stays.
-    @MainActor private static var appliedLaunchLandscapeOnly = false
+    /// only" set that way; `-landscapeSide left` makes its lock pick that side. Only the throwaway demo settings and side
+    /// store are touched, and only once, so a later toggle by hand stays.
+    @MainActor private static var appliedLaunchOrientationOptions = false
 
-    private static func applyLaunchLandscapeOnly(to settingsStore: SettingsStore) {
-        guard !appliedLaunchLandscapeOnly else { return }
-        appliedLaunchLandscapeOnly = true
+    private static func applyLaunchOrientationOptions(to settingsStore: SettingsStore) {
+        guard !appliedLaunchOrientationOptions else { return }
+        appliedLaunchOrientationOptions = true
         let options = LaunchOptions()
-        guard options.demoData, let isOn = options.landscapeOnly else { return }
-        settingsStore.settings.lockLandscape = isOn
+        guard options.demoData else { return }
+        if let isOn = options.landscapeOnly { settingsStore.settings.lockLandscape = isOn }
+        if let side = options.landscapeSide { OrientationLock.rememberSide(side == .left ? .landscapeLeft : .landscapeRight) }
     }
 }
 
@@ -64,10 +66,14 @@ private struct CanvasAvoidance {
     var countdownArea: CGRect?
 }
 
-/// What the orientation lock hears about the prompter's window.
+/// What the orientation lock hears about the prompter's window. The orientation is in it so a half turn (same size,
+/// other way up, which the inner screen of a foldable does on its own) is reported too: the reader's body runs again when
+/// the camera's region moves round the screen.
 private struct WindowReport: Equatable {
     var size: CGSize
     var isFoldable: Bool
+    var isHingeClosed: Bool?
+    var orientation: UIInterfaceOrientation?
 }
 
 /// Everything on screen once the controller exists.
@@ -84,6 +90,8 @@ private struct PrompterStage: View {
     @State private var isShowingSettings = false
     /// The device has a hinge (iPhone Duo): a fold mid-take keeps the exact place at the reading line.
     @State private var isFoldable = false
+    /// Foldables: the hinge is closed (the cover is in use). Tells the orientation lock which screen the window is on.
+    @State private var isHingeClosed: Bool?
     /// Bumped on every touch; the close button shows for 3 s after the last one.
     @State private var touchCount = 0
     @State private var recentlyTouched = false
@@ -99,8 +107,10 @@ private struct PrompterStage: View {
             // a reserved region too, and its prompter must stay exactly as it is.
             transformedCanvas(screenSize: proxy.size, avoiding: isFoldable ? proxy.activeReservedRects : [])
                 // A fold moves the window to the other screen; the orientation lock follows (foldables only).
-                .onChange(of: WindowReport(size: proxy.size, isFoldable: isFoldable), initial: true) { _, report in
-                    OrientationLock.windowChanged(size: report.size, isFoldable: report.isFoldable)
+                .onChange(of: windowReport(size: proxy.size), initial: true) { _, report in
+                    OrientationLock.windowChanged(
+                        size: report.size, isFoldable: report.isFoldable, isHingeClosed: report.isHingeClosed
+                    )
                 }
         }
         .ignoresSafeArea()
@@ -142,8 +152,16 @@ private struct PrompterStage: View {
             try? await Task.sleep(for: .milliseconds(800))
             openSettings()
         }
-        .modifier(FoldableDeviceReader(isFoldable: $isFoldable))
+        .modifier(FoldableDeviceReader(isFoldable: $isFoldable, isHingeClosed: $isHingeClosed))
         .duoProbe(DuoProbe.isEnabled, label: "prompter ")
+    }
+
+    /// Off a foldable only the size matters (and `windowChanged` ignores it), so the orientation isn't read there.
+    private func windowReport(size: CGSize) -> WindowReport {
+        WindowReport(
+            size: size, isFoldable: isFoldable, isHingeClosed: isHingeClosed,
+            orientation: isFoldable ? OrientationLock.interfaceOrientation : nil
+        )
     }
 
     // MARK: Canvas

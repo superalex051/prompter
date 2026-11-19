@@ -381,15 +381,22 @@ struct PrompterOrientationPolicyTests {
 
     // MARK: Foldables (iPhone Duo)
 
+    /// The finding: the screen was read from the window's size alone, so Split View or a pinned video on the inner screen
+    /// (a smaller window) read as the cover, and a locked take turned as if folded. A small window counts as the cover
+    /// only while the hinge is closed; otherwise the screen is left as it was.
     @Test(arguments: [
-        (CGSize(width: 466, height: 678), PrompterOrientationPolicy.Screen.cover),
-        (CGSize(width: 678, height: 466), .cover),
-        (CGSize(width: 382, height: 678), .cover),      // half way through an unfold
-        (CGSize(width: 951, height: 669), .inner),
-        (CGSize(width: 669, height: 951), .inner),
+        (CGSize(width: 466, height: 678), true, PrompterOrientationPolicy.Screen?.some(.cover)),
+        (CGSize(width: 678, height: 466), true, .cover),
+        (CGSize(width: 951, height: 669), false, .inner),
+        (CGSize(width: 669, height: 951), false, .inner),
+        (CGSize(width: 951, height: 669), true, .inner),     // folding: the hinge closed before the window moved
+        (CGSize(width: 678, height: 466), false, nil),       // unfolding: the hinge opens before the window moves
+        (CGSize(width: 382, height: 678), false, nil),       // half way through an unfold
+        (CGSize(width: 475, height: 669), false, nil),       // Split View, half of the inner screen
+        (CGSize(width: 951, height: 420), false, nil),       // a video pinned to the top of the inner screen
     ])
-    func screenFromTheWindow(size: CGSize, screen: PrompterOrientationPolicy.Screen) {
-        #expect(Policy.Screen(windowSize: size) == screen)
+    func screenFromTheWindowAndTheHinge(size: CGSize, isHingeClosed: Bool, screen: PrompterOrientationPolicy.Screen?) {
+        #expect(Policy.Screen.from(windowSize: size, isHingeClosed: isHingeClosed) == screen)
     }
 
     /// Measured on the simulator, for one hold of the device: cover portrait with the inner screen's landscape left, cover
@@ -419,7 +426,87 @@ struct PrompterOrientationPolicyTests {
         #expect(policy.windowChanged(to: .cover, current: .landscapeLeft) == .rotate(.portrait))
         #expect(policy.mask == .portrait)
         #expect(policy.isLocked)
-        #expect(policy.lastSide == .landscapeLeft)            // the next take still starts on the side the last lock used
+        // The take opened on the inner screen, which ignores the lock: its side isn't remembered for the next take.
+        #expect(policy.lastSide == nil)
+    }
+
+    /// The finding: the remembered side was one value for both screens, so a take on the inner screen (landscape left,
+    /// the side it shows by itself) set the side the next take on the cover locked to, a quarter turn from the take before
+    /// it there, with the camera at the bottom. Only the cover's own locks set it now.
+    @Test func aTakeOnTheInnerScreenLeavesTheCoversSideAlone() {
+        var policy = Policy(defaultMask: .allButUpsideDown, lastSide: .landscapeRight)
+        // The open lock runs before the window is reported, so it doesn't know the screen yet.
+        _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft)
+        #expect(policy.windowChanged(to: .inner, current: .landscapeLeft) == .none)
+        #expect(policy.lastSide == .landscapeRight)
+        // Landscape only switched off and on again there: still not the cover's choice.
+        _ = policy.landscapeOnlyChanged(false, current: .landscapeLeft)
+        _ = policy.landscapeOnlyChanged(true, current: .landscapeLeft)
+        #expect(policy.lastSide == .landscapeRight)
+        _ = policy.prompterClosed()
+        // The next take, folded and held upright: back to the cover's own side.
+        #expect(policy.prompterOpened(landscapeOnly: true, current: .portrait) == .rotate(.landscapeRight))
+        #expect(policy.windowChanged(to: .cover, current: .landscapeRight) == .none)
+        #expect(policy.lastSide == .landscapeRight)
+    }
+
+    @Test func aTakeOnTheCoverStillSetsTheSide() {
+        var policy = Policy(defaultMask: .allButUpsideDown, lastSide: .landscapeRight)
+        _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft)
+        _ = policy.windowChanged(to: .cover, current: .landscapeLeft)
+        #expect(policy.lastSide == .landscapeLeft)
+        // A fold mid-take doesn't change it either way.
+        _ = policy.windowChanged(to: .inner, current: .portraitUpsideDown)
+        #expect(policy.lastSide == .landscapeLeft)
+    }
+
+    /// The finding: Split View on the inner screen (a 475 pt wide window) read as a fold to the cover. A small window with
+    /// the hinge open now leaves the screen as it was: no turn, and closing still restores.
+    @Test func splitViewOnTheInnerScreenIsNotAFold() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft)
+        _ = policy.windowChanged(to: .inner, current: .landscapeLeft)
+        let half = Policy.Screen.from(windowSize: CGSize(width: 475, height: 669), isHingeClosed: false)
+        #expect(policy.windowChanged(to: half, current: .landscapeLeft) == .none)
+        #expect(policy.screen == .inner)
+        #expect(policy.mask == .landscapeLeft)
+        #expect(policy.prompterClosed() == .rotate(.landscapeLeft))
+    }
+
+    /// Unfolding, the window can still be on the cover while the hinge reads open, and on a fold back the window can reach
+    /// the cover before the hinge reads closed. Those reports change nothing, so the fold still maps the orientation the
+    /// screen it came from really had.
+    @Test func reportsInTheMiddleOfAFoldChangeNothing() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft)
+        _ = policy.windowChanged(to: .inner, current: .landscapeLeft)
+        // Folding: the window is on the cover (portrait already), the hinge not closed yet.
+        #expect(policy.windowChanged(to: nil, current: .portrait) == .none)
+        #expect(policy.orientationOnScreen == .landscapeLeft)
+        #expect(policy.windowChanged(to: .cover, current: .portrait) == .rotate(.portrait))
+    }
+
+    @Test func openedInSplitViewNeverRestoresAnotherScreensOrientation() {
+        var policy = Policy(defaultMask: .allButUpsideDown, lastSide: .landscapeRight)
+        _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft)
+        #expect(policy.windowChanged(to: nil, current: .landscapeLeft) == .none)
+        #expect(policy.lastSide == .landscapeRight)          // the device is open: not the cover's choice
+        // Folded later: the first screen known is the cover, but the take didn't open there.
+        _ = policy.windowChanged(to: .cover, current: .landscapeLeft)
+        #expect(policy.prompterClosed() == .refresh)
+    }
+
+    /// The finding: the inner screen ignores the lock and can turn over with the device (landscape left to right, same
+    /// size). Reported, the fold then maps the side the inner screen really shows: here that is upside down on the cover,
+    /// which an iPhone app can't show, so the lock stays rather than locking portrait with the text upside down.
+    @Test func aHalfTurnOnTheInnerScreenIsWhatTheFoldUses() {
+        var policy = Policy(defaultMask: .allButUpsideDown)
+        _ = policy.prompterOpened(landscapeOnly: true, current: .landscapeLeft)
+        _ = policy.windowChanged(to: .inner, current: .landscapeLeft)
+        #expect(policy.windowChanged(to: .inner, current: .landscapeRight) == .none)
+        #expect(policy.orientationOnScreen == .landscapeRight)
+        #expect(policy.windowChanged(to: .cover, current: .landscapeLeft) == .none)
+        #expect(policy.mask == .landscapeLeft)
     }
 
     /// The inner screen ignores the app's orientations (measured: locked to landscape right, it showed landscape left). On

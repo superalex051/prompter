@@ -1,15 +1,21 @@
 import SwiftUI
 
 /// Sets `isFoldable` once the device reports a hinge (iPhone Duo, iOS 27.1 and later). It stays set for as long as the
-/// view lives: the prompter only needs to know that folds can happen, never the hinge's angle (Apple: don't lay out from
-/// the hinge). Below iOS 27.1, and on devices without a hinge, it never changes, so nothing differs there.
+/// view lives: the prompter never lays out from the hinge (Apple: don't), it only needs to know that folds can happen,
+/// and, for the orientation lock, whether the hinge is closed (`isHingeClosed`: the cover is the screen in use). Below
+/// iOS 27.1, and on devices without a hinge, neither ever changes, so nothing differs there.
 struct FoldableDeviceReader: ViewModifier {
     @Binding var isFoldable: Bool
+    /// nil until the first hinge report; then whether the hinge is closed, kept through a report without a hinge.
+    @Binding var isHingeClosed: Bool?
 
     func body(content: Content) -> some View {
         if #available(iOS 27.1, *) {
             content.onHingeChange { _, new in
-                if new.hinge != nil, !isFoldable { isFoldable = true }
+                guard let hinge = new.hinge else { return }
+                if !isFoldable { isFoldable = true }
+                let isClosed = hinge.status == .closed
+                if isHingeClosed != isClosed { isHingeClosed = isClosed }
             }
         } else {
             content
