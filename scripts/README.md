@@ -27,3 +27,28 @@ What it does:
 For long waits, run it in the background. Settings (`HEAVY_LOCK`, `HEAVY_MAX_COMPRESSED_GB`, and so on) are
 listed at the top of the script. `scripts/heavy.sh --self-test` checks the lock, stale-lock clearing and the
 memory gate, signal handling and simulator cleanup (with a fake `xcrun`) in about 40 seconds without touching the real lock or simulators.
+
+## iPhone Duo (the foldable)
+
+The Duo simulator ("Prompter Dev Duo") has a cover screen (466x678 pt) and an open screen (951x669 pt), and `xcrun simctl`
+has no verb to fold it. These scripts work around that:
+
+- `scripts/duo-posture.sh select|state|Closed|Book|Open|"Rotate Right"` presses Device Hub's own posture buttons through
+  the macOS Accessibility API. It refuses to press while Device Hub shows another device, so run `select` first. "Rotate
+  Right" is cumulative and Device Hub does not say which way the simulator is turned, so the helpers below measure the
+  window instead of trusting a count.
+- `lib.sh` has the helpers `sim_is_duo`, `duo_probe` (launches the app with `-duoProbe` and returns the window it logged:
+  width, height, horizontal size class, safe area left and top) and `duo_apply_posture` (presses buttons until the
+  measured window matches Closed 466x678, ClosedLandscape 678x466, Open 951x669 or OpenTall 669x951).
+- `scripts/qa.sh` takes `DUO_POSTURE=Closed|Open|OpenTall` and picks the flows from the measured window (see `qa/README.md`).
+- `scripts/duo-shots.sh <folder>` is the contact-sheet run: one build, then every posture (closed, closed-landscape, open,
+  open-tall, book) times every route (library, editor, prompter playing, prompterSettings, settings, syncSettings,
+  macRemote), each saved from both displays as `<posture>-<route>-<display>.png` (display is `cover` or `open`), plus a
+  `manifest.txt` with the window the app reported for each shot.
+
+```bash
+scripts/heavy.sh --task DUO-SHOTS -- scripts/duo-shots.sh .inbox/duo/shots/run1
+POSTURES="closed open" ROUTES="library prompter" SKIP_BUILD=1 scripts/heavy.sh --task DUO-SHOTS -- scripts/duo-shots.sh /tmp/x
+```
+
+Both need Device Hub running and Accessibility permission for the terminal. Never quit Device Hub; other sessions share it.

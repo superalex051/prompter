@@ -173,3 +173,74 @@ for devices in json.load(sys.stdin)["devices"].values():
 sys.exit(1)
 '
 }
+
+# --- iPhone Duo (the foldable) ---------------------------------------------------------------------------------------
+# The Duo has two displays and no simctl verb for folding, so a posture is set by pressing Device Hub's buttons
+# (scripts/duo-posture.sh) and what the window really is gets measured by launching the app with -duoProbe, which logs the
+# window size, the real safe area and the size classes to Documents/duo-probe.log (Prompter/App/DuoProbe.swift).
+
+# sim_is_duo <udid>: succeeds when the simulator is an iPhone Duo (by its name, like sim_is_ipad).
+sim_is_duo() {
+  xcrun simctl list devices available -j | UDID="$1" python3 -I -c '
+import json, os, sys
+for devices in json.load(sys.stdin)["devices"].values():
+    for d in devices:
+        if d["udid"] == os.environ["UDID"]:
+            sys.exit(0 if "Duo" in d["name"] else 1)
+sys.exit(1)
+'
+}
+
+# duo_probe <udid> <bundle id> [app args...]: launch the app with -duoProbe -demoData plus the args, give it a moment to lay
+# out, and print the last window it logged as "<width> <height> <h-class> <safe left> <safe top>"
+# (for example "466 678 compact 0 0"). Prints nothing when the app wrote no log, so callers must handle an empty answer.
+# The app is terminated again afterwards.
+duo_probe() {
+  local udid="$1" app_id="$2" data line; shift 2
+  xcrun simctl terminate "$udid" "$app_id" 2>/dev/null || true
+  data="$(xcrun simctl get_app_container "$udid" "$app_id" data 2>/dev/null)" || return 0
+  rm -f "$data/Documents/duo-probe.log"
+  xcrun simctl launch "$udid" "$app_id" -duoProbe -demoData "$@" >/dev/null 2>&1 || return 0
+  sleep "${DUO_PROBE_WAIT:-5}"
+  line="$(grep -E '^[0-9:.]+ size ' "$data/Documents/duo-probe.log" 2>/dev/null | tail -1)"
+  xcrun simctl terminate "$udid" "$app_id" 2>/dev/null || true
+  [ -n "$line" ] || return 0
+  echo "$line" | sed -nE 's/.* size ([0-9]+)x([0-9]+) · safe t([0-9.]+) l([0-9.]+) .* classes h:([a-z]+) .*/\1 \2 \5 \4 \3/p'
+}
+
+# duo_apply_posture <udid> <bundle id> <Closed|Open|OpenTall|ClosedLandscape|Book>: put the Duo in that posture and
+# check it by measuring the window, because "Rotate Right" is cumulative and Device Hub does not say which way the
+# simulator is turned. Closed = 466x678, ClosedLandscape = 678x466, Open = 951x669, OpenTall = 669x951 (Open, then a turn).
+# Book only presses the button (the window is whatever the app makes of it). Returns 1 when the window never matched.
+duo_apply_posture() {
+  local udid="$1" app_id="$2" want="$3" base shape probe w h tries=0
+  case "$want" in
+    Closed|ClosedLandscape) base=Closed ;;
+    Open|OpenTall) base=Open ;;
+    Book) base=Book ;;
+    *) echo "unknown posture '$want'" >&2; return 1 ;;
+  esac
+  # Device Hub needs a moment to list a freshly booted simulator (and briefly shows a helper window or a second process
+  # while it turns), so `select` is tried a few times before giving up.
+  local sel=0
+  until scripts/duo-posture.sh select >/dev/null 2>&1; do
+    sel=$((sel + 1)); [ "$sel" -le 6 ] || { echo "Device Hub would not show the Duo (scripts/duo-posture.sh select kept failing)" >&2; return 1; }
+    sleep 5
+  done
+  [ "$(scripts/duo-posture.sh state)" = "$base" ] || { scripts/duo-posture.sh "$base" >/dev/null || return 1; sleep 5; }
+  [ "$want" = Book ] && return 0
+  while :; do
+    probe="$(duo_probe "$udid" "$app_id" -route library)"
+    read -r w h _ <<<"$probe"
+    case "$want" in
+      Closed)          [ -n "$w" ] && [ "$w" -lt 600 ] && [ "$w" -lt "$h" ] && return 0 ;;
+      ClosedLandscape) [ -n "$w" ] && [ "$w" -lt 800 ] && [ "$w" -gt "$h" ] && return 0 ;;
+      Open)            [ -n "$w" ] && [ "$w" -gt 800 ] && [ "$w" -gt "$h" ] && return 0 ;;
+      OpenTall)        [ -n "$w" ] && [ "$w" -gt 600 ] && [ "$w" -lt "$h" ] && return 0 ;;
+    esac
+    tries=$((tries + 1))
+    [ "$tries" -le 4 ] || { echo "posture $want: the window stayed ${w:-unknown}x${h:-unknown} after $((tries - 1)) turns" >&2; return 1; }
+    scripts/duo-posture.sh "Rotate Right" >/dev/null || return 1
+    sleep 5
+  done
+}

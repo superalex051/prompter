@@ -46,6 +46,29 @@ One flow by hand, on a simulator that already has the app installed:
 ~/.maestro/bin/maestro --device <udid> test --test-output-dir /tmp/qa qa/library.yaml
 ```
 
+## iPhone Duo
+
+`SIM="Prompter Dev Duo" scripts/qa.sh` runs the flows on the foldable simulator. The Duo has no `simctl` verb for folding, so
+`DUO_POSTURE=Closed|Open|OpenTall` presses Device Hub's posture buttons (`scripts/duo-posture.sh`) after boot and then
+**measures** the window (the app's `-duoProbe` log), because "Rotate Right" is cumulative and Device Hub does not say which way
+the simulator is turned. Without `DUO_POSTURE` the Duo is used in the posture it is in.
+
+- **Which flows.** Chosen from the measured window, not the simulator's name: a window at least `DUO_SPLIT_MIN_WIDTH` points wide
+  (default 700: the open Duo, 951) runs the `ipad-*` split-view flows; a narrower one (the cover, 466, and the open Duo turned
+  tall, 669) runs the phone flows. `journey.yaml` is left out on the Duo: its settings-popover taps are iPhone 17 Pro points.
+  On `OpenTall` the library layout is stream B's to decide; keep the width threshold in step with it.
+- **Env the flows get.** Every flow gets `-e DUO=0|1`. The prompter flows get `TAP_DONE`, `TAP_CLOSE` and `TURNS`
+  (portrait tap points worked out from the measured prompter window; off the Duo they are the iPhone 17 Pro numbers, so the
+  iPhone run is unchanged). Do not put a default for these in a flow's `env:` header: a header value wins over `-e`
+  (checked on Maestro 2.11.0), so the measured value would never arrive. Run flows through `scripts/qa.sh`.
+- **Screenshots.** Maestro's `takeScreenshot` on the cover screen is the cover display (1398 x 2034 px, portrait, the picture
+  in the prompter turned a quarter turn like on an iPhone). The open display has not been checked from Maestro. For shots of
+  every screen in every posture from both displays use `scripts/duo-shots.sh` (see `scripts/README.md`).
+- **Taps by id and the popover.** As on the iPhone, a `tapOn: {id: prompter.close}` lands in the wrong place in the prompter and the
+  settings popover is not in Maestro's hierarchy, so Done and close are points.
+- **Needs Device Hub.** `DUO_POSTURE` and `duo-shots.sh` need Device Hub open with a window and Accessibility permission. If it
+  has no window (it can lose it), they stop with "Device Hub would not show the Duo"; open its window by hand.
+
 ## Where the screenshots land
 
 `qa/output/<run>/<timestamp Maestro adds>/<flow name>/takeScreenshot/<name>.png`, git-ignored. `<flow name>` is the
