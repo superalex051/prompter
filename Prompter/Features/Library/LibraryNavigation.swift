@@ -51,3 +51,40 @@ struct LibraryNavigation: Equatable, Sendable {
         openScript = id
     }
 }
+
+/// Which scripts have an editor on screen, so a blank new script the person left is dropped whichever comes first: the
+/// library closing it, or its editor going away.
+///
+/// A back button tap closes the script first and the editor goes away at the end of the slide, while a swipe back may
+/// end the other way round, and a layout switch (the iPhone Duo folding or unfolding) takes an editor away while its
+/// script stays open. Dropping the script only once both have happened covers every order, and never while an editor
+/// still shows it, so a sliding editor never flashes "Script deleted".
+struct EditorPresence: Equatable, Sendable {
+    /// Editors on screen per script: a layout switch can briefly show two of the same script.
+    private var onScreen: [Script.ID: Int] = [:]
+
+    mutating func editorAppeared(_ id: Script.ID) {
+        onScreen[id, default: 0] += 1
+    }
+
+    /// An editor of `id` went away. Returns whether the script was left: no editor of it is on screen any more and the
+    /// library no longer has it open (`isOpen`).
+    mutating func editorDisappeared(_ id: Script.ID, isOpen: Bool) -> Bool {
+        let left = max((onScreen[id] ?? 0) - 1, 0)
+        onScreen[id] = left == 0 ? nil : left
+        return left == 0 && !isOpen
+    }
+
+    /// The library closed `id` (back to the list, or another script opened). Returns whether the script was left: its
+    /// editor already went away. Otherwise that editor's own exit decides.
+    func scriptClosed(_ id: Script.ID) -> Bool {
+        onScreen[id] == nil
+    }
+}
+
+/// Holds `EditorPresence` for the library and its editors: a plain reference SwiftUI doesn't observe, so editors coming
+/// and going never redraw the library.
+@MainActor
+final class EditorPresenceTracker {
+    var state = EditorPresence()
+}

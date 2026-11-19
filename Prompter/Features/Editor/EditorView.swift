@@ -8,6 +8,8 @@ struct EditorView: View {
     /// Whether the library still has this script open. An editor that goes away while it is still open was only rebuilt
     /// for the other layout (the iPhone Duo folding or unfolding), not left by the person.
     var isOpen: (Script.ID) -> Bool = { _ in false }
+    /// The library's editors on screen (see `EditorPresence`); nil where only this editor can leave the script (previews).
+    var presence: EditorPresenceTracker?
     /// The keyboard across a layout switch (see `EditorKeyboard`); nil where the layout never switches (previews).
     var keyboard: EditorKeyboardHandoff?
 
@@ -22,10 +24,14 @@ struct EditorView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { presence?.state.editorAppeared(scriptID) }
         // A new script that was never typed into shouldn't be left behind in the library. Not when the editor was only
-        // rebuilt for the other layout: the script is still open there, blank or not.
+        // rebuilt for the other layout: the script is still open there, blank or not. When the library closed the script
+        // before this editor went away (a back button tap), this is where it goes; the other way round, the library drops it.
         .onDisappear {
-            if !isOpen(scriptID) { store.deleteIfBlank(scriptID) }
+            let left = presence?.state.editorDisappeared(scriptID, isOpen: isOpen(scriptID)) ?? !isOpen(scriptID)
+            LibraryDebugLog.note("editor gone, open \(isOpen(scriptID)), left \(left)")
+            if left { store.deleteIfBlank(scriptID) }
         }
     }
 }
@@ -49,20 +55,33 @@ struct EditorKeyboard: Equatable, Sendable {
     }
 
     /// What a layout switch leaves for the next editor of `scriptID`: the field to type in, or nil to keep the keyboard
-    /// down.
+    /// down, and where the cursor was in the script text.
     struct Handoff: Equatable, Sendable {
         var scriptID: Script.ID
         var field: Field?
+        /// The cursor or selection in the script text, in UTF-16 offsets (see `EditorSelection`); nil when not known.
+        var selection: Range<Int>? = nil
     }
 
-    /// The open editor's script and the field it types in (nil while the keyboard is down).
+    /// The open editor's script, the field it types in (nil while the keyboard is down) and its cursor in the script text.
     private(set) var current: Handoff?
     /// Left by the last layout switch, until the new editor takes it.
     private(set) var pending: Handoff?
 
-    /// The editor of `scriptID` moved its focus (nil: the keyboard went down).
+    /// The editor of `scriptID` moved its focus (nil: the keyboard went down). The cursor stays as last reported.
     mutating func focusChanged(to field: Field?, in scriptID: Script.ID) {
-        current = Handoff(scriptID: scriptID, field: field)
+        let selection = current?.scriptID == scriptID ? current?.selection : nil
+        current = Handoff(scriptID: scriptID, field: field, selection: selection)
+    }
+
+    /// The cursor moved in the script text of `scriptID`'s editor. The editor reports it only while typing there, so an
+    /// editor that goes away, or one that has not taken the keyboard yet, never overwrites it.
+    mutating func selectionChanged(to offsets: Range<Int>, in scriptID: Script.ID) {
+        if current?.scriptID == scriptID {
+            current?.selection = offsets
+        } else {
+            current = Handoff(scriptID: scriptID, field: nil, selection: offsets)
+        }
     }
 
     /// The library opened another script, or closed the open one. What an earlier editor reported no longer applies: an
@@ -79,7 +98,12 @@ struct EditorKeyboard: Equatable, Sendable {
             pending = nil
             return
         }
-        pending = Handoff(scriptID: openScript, field: current?.scriptID == openScript ? current?.field : nil)
+        let sameScript = current?.scriptID == openScript
+        pending = Handoff(
+            scriptID: openScript,
+            field: sameScript ? current?.field : nil,
+            selection: sameScript ? current?.selection : nil
+        )
     }
 
     /// The new editor of `scriptID` takes what the layout switch left for it (nil when the editor was not rebuilt by a
@@ -88,6 +112,40 @@ struct EditorKeyboard: Equatable, Sendable {
         guard let pending, pending.scriptID == scriptID else { return nil }
         self.pending = nil
         return pending
+    }
+}
+
+/// The cursor in the script text as plain numbers, so it can outlive the editor it came from: a `TextSelection` points
+/// into one particular string. UTF-16 offsets, the unit the text view itself counts in.
+enum EditorSelection {
+    /// `selection` in `text` as UTF-16 offsets, or nil when there is none, it is several ranges, or it doesn't fit `text`
+    /// (the text view can report a cursor a moment before the text that goes with it).
+    static func offsets(of selection: TextSelection?, in text: String) -> Range<Int>? {
+        guard let selection, case .selection(let range) = selection.indices,
+              range.lowerBound >= text.startIndex, range.upperBound <= text.endIndex,
+              let lower = range.lowerBound.samePosition(in: text.utf16),
+              let upper = range.upperBound.samePosition(in: text.utf16)
+        else { return nil }
+        let start = text.utf16.distance(from: text.utf16.startIndex, to: lower)
+        return start..<(start + text.utf16.distance(from: lower, to: upper))
+    }
+
+    /// A cursor (or selection) at `offsets` in `text`, kept inside the text and on whole characters, because the text may
+    /// have changed since the offsets were taken.
+    static func selection(at offsets: Range<Int>, in text: String) -> TextSelection {
+        let lower = index(atUTF16: offsets.lowerBound, in: text)
+        let upper = max(lower, index(atUTF16: offsets.upperBound, in: text))
+        return lower == upper ? TextSelection(insertionPoint: lower) : TextSelection(range: lower..<upper)
+    }
+
+    /// The start of the character at UTF-16 offset `offset`, clamped to the text.
+    private static func index(atUTF16 offset: Int, in text: String) -> String.Index {
+        let utf16 = text.utf16
+        var index = utf16.index(utf16.startIndex, offsetBy: min(max(offset, 0), utf16.count))
+        while index > text.startIndex, index.samePosition(in: text) == nil {
+            index = utf16.index(before: index)
+        }
+        return index
     }
 }
 
@@ -109,6 +167,8 @@ private struct EditorContent: View {
 
     @State private var title: String
     @State private var bodyText: String
+    /// The cursor in the script text, kept for a layout switch (see `EditorKeyboard`).
+    @State private var bodySelection: TextSelection?
     @State private var didAutofocus = false
     @FocusState private var focus: Field?
 
@@ -148,7 +208,7 @@ private struct EditorContent: View {
             Divider()
                 .padding(.horizontal, margin)
 
-            TextEditor(text: $bodyText)
+            TextEditor(text: $bodyText, selection: $bodySelection)
                 .font(.title3)
                 .lineSpacing(6)
                 .scrollContentBackground(.hidden)
@@ -187,6 +247,7 @@ private struct EditorContent: View {
         .onChange(of: bodyText) { _, newValue in
             store.update(scriptID, body: newValue)
         }
+        .onChange(of: bodySelection) { _, selection in reportSelection(selection) }
         // A new version from the Mac (sync) replaces the drafts, so the next keystroke doesn't save over it.
         .onChange(of: store.remoteChange) { _, change in adoptRemoteChange(change) }
         .toolbar {
@@ -220,21 +281,49 @@ private struct EditorContent: View {
                 try? await Task.sleep(for: .milliseconds(450))
                 let handoff = Task.isCancelled ? nil : keyboard?.state.take(for: scriptID)
                 LibraryDebugLog.note("editor opened blank, handoff \(String(describing: handoff?.field))")
-                focus = handoff.map(\.field) ?? .body
+                if let handoff {
+                    takeKeyboard(handoff)
+                } else {
+                    focus = .body
+                }
             } else if let keyboard {
                 // An existing script changes nothing here unless a layout switch left it the keyboard.
                 try? await Task.sleep(for: .milliseconds(450))
                 guard !Task.isCancelled, let handoff = keyboard.state.take(for: scriptID) else { return }
-                LibraryDebugLog.note("editor takes the keyboard handoff: \(String(describing: handoff.field))")
-                focus = handoff.field
+                LibraryDebugLog.note(
+                    "editor takes the keyboard handoff: \(String(describing: handoff.field)), "
+                        + "cursor \(handoff.selection.map { "\($0)" } ?? "none")"
+                )
+                takeKeyboard(handoff)
             }
         }
+    }
+
+    /// Types where the editor before the layout switch did: the cursor goes back to its place in the script text first,
+    /// so the keyboard comes up there and the text scrolls to it, not to the end of the script.
+    private func takeKeyboard(_ handoff: EditorKeyboard.Handoff) {
+        if handoff.field == .body, let offsets = handoff.selection {
+            bodySelection = EditorSelection.selection(at: offsets, in: bodyText)
+        }
+        focus = handoff.field
+    }
+
+    /// Tells the library where the cursor is, for a layout switch. Only while typing in the script text: an editor that is
+    /// going away, or has not taken the keyboard yet, must not overwrite the place.
+    private func reportSelection(_ selection: TextSelection?) {
+        guard let keyboard, focus == .body, let offsets = EditorSelection.offsets(of: selection, in: bodyText) else { return }
+        keyboard.state.selectionChanged(to: offsets, in: scriptID)
     }
 
     private func adoptRemoteChange(_ change: RemoteChange?) {
         guard let change, change.ids.contains(scriptID), let stored = store.script(id: scriptID) else { return }
         if stored.title != title { title = stored.title }
-        if stored.body != bodyText { bodyText = stored.body }
+        if stored.body != bodyText {
+            // The cursor stays at the same place in the new text, never past its end.
+            let offsets = EditorSelection.offsets(of: bodySelection, in: bodyText)
+            bodyText = stored.body
+            bodySelection = offsets.map { EditorSelection.selection(at: $0, in: stored.body) }
+        }
     }
 
     /// Takes the store's title into the draft, unless the person is typing in the title field. It reads the store, not

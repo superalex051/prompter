@@ -16,6 +16,8 @@ struct LibraryView: View {
     @State private var windowWidth: CGFloat?
     /// The editor's keyboard across a layout switch; see `EditorKeyboard`. Not observed (see `EditorKeyboardHandoff`).
     @State private var keyboard = EditorKeyboardHandoff()
+    /// Which scripts have an editor on screen, for dropping a blank new script the person left; see `EditorPresence`.
+    @State private var editors = EditorPresenceTracker()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var prompterTarget: PrompterTarget?
     @State private var isImporting = false
@@ -92,6 +94,7 @@ struct LibraryView: View {
                 keyboard.state.layoutChanged(openScript: navigation.openScript)
                 debugNote("library layout \(kind), open \(navigation.openScript.map { "\($0)" } ?? "none"), "
                     + "keyboard to \(String(describing: keyboard.state.pending?.field)), "
+                    + "cursor \(keyboard.state.pending?.selection.map { "\($0)" } ?? "none"), "
                     + "columns \(String(describing: columnVisibility))")
                 // The split view always comes back with both columns. The finding: after one round trip (split, stack,
                 // split) the sidebar stayed hidden, so the second unfold of the iPhone Duo showed the editor or "Pick a
@@ -101,7 +104,16 @@ struct LibraryView: View {
                 withTransaction(transaction) { columnVisibility = .all }
             }
             // A layout switch keeps the open script, so the keyboard handoff survives it; opening another script resets it.
-            .onChange(of: navigation.openScript) { keyboard.state.openScriptChanged() }
+            .onChange(of: navigation.openScript) { old, _ in
+                keyboard.state.openScriptChanged()
+                // A blank new script whose editor already went away (a swipe back can end before the stack's path
+                // changes) is dropped here; one whose editor is still on screen goes when that editor does.
+                if let old {
+                    let left = editors.state.scriptClosed(old)
+                    debugNote("library closed a script, left \(left)")
+                    if left { store.deleteIfBlank(old) }
+                }
+            }
             #if DEBUG
             .onChange(of: columnVisibility) { _, columns in debugNote("library columns \(String(describing: columns))") }
             #endif
@@ -243,6 +255,7 @@ struct LibraryView: View {
             scriptID: id,
             onPrompt: { prompterTarget = PrompterTarget(id: $0) },
             isOpen: { navigation.isOpen($0) },
+            presence: editors,
             keyboard: keyboard
         )
     }
