@@ -8,8 +8,9 @@ import CoreGraphics
 /// "Pick a script" page. So a phone gets the split only when the window is also wide enough for two columns (the open
 /// Duo held wide, 951 pt, or a Pro Max in landscape, about 956 pt).
 ///
-/// The width also keeps the layout steady while the Duo folds or unfolds: the size class flips to regular for a frame
-/// or two at the cover's width (382 and 466 pt were measured), which stays below the minimum.
+/// The width also keeps the layout steady while the Duo unfolds: the size class turns regular a frame or two before the
+/// window scene grows (the scene was still the cover's 466 pt then, the views 382 and 466 pt), which stays below the
+/// minimum, so the library switches once.
 ///
 /// An iPad keeps exactly what it had: the split whenever the width is regular, including a half-screen window narrower
 /// than the phone minimum.

@@ -393,7 +393,8 @@ struct LibraryView: View {
         guard width != windowWidth else { return }
         windowWidth = width
         debugNote("library window \(width.map { "\(Int($0))" } ?? "?") pt wide, "
-            + "view \(measured.map { "\(Int($0))" } ?? "?")")
+            + "view \(measured.map { "\(Int($0))" } ?? "?"), "
+            + "window scenes \(UIApplication.shared.connectedScenes.filter { $0 is UIWindowScene }.count)")
     }
 
     /// The width of the app's window scene. A phone runs one scene; with more than one (an iPad) there is no telling which
