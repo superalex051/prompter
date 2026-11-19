@@ -41,6 +41,9 @@ struct LaunchOptions: Equatable, Sendable {
     /// scripts/voice-check.sh) at their recorded times instead of listening. The simulator has no working speech
     /// recogniser, so this is how it shows the text following a real read-through. Same path rules as `voiceFile`.
     var voiceReplay: String?
+    /// Debug builds: "-duoProbe" logs the window's shape (size, size classes, the fold, the hinge) on every change to
+    /// Documents/duo-probe.log. See DuoProbe.swift.
+    var duoProbe: Bool = false
 
     init(arguments: [String] = LaunchArguments.process) {
         if let value = Self.value(after: "route", in: arguments), let route = Route(rawValue: value.lowercased()) {
@@ -57,6 +60,7 @@ struct LaunchOptions: Equatable, Sendable {
         demoData = Self.flag("demoData", in: arguments)
         autoStart = Self.flag("autoStart", in: arguments)
         noWatchPush = Self.flag("noWatchPush", in: arguments)
+        duoProbe = Self.flag("duoProbe", in: arguments)
     }
 
     /// `voiceFile` as a file URL: absolute paths as they are, relative ones under `home` (the app's data container).

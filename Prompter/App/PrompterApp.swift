@@ -94,6 +94,7 @@ struct PrompterApp: App {
                 .environment(remoteHub)
                 .environment(syncClient)
                 .preferredColorScheme(.dark)
+                .duoProbe(launchOptions.duoProbe)
         }
         .commands { LibraryCommands() }
         // Sync runs in the foreground only: it connects when the app becomes active and disconnects cleanly when it goes
