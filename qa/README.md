@@ -30,7 +30,7 @@ SIM="Prompter Dev iPad" scripts/qa.sh ipad-library ipad-landscape
 
 With no flow names, an iPad simulator runs only `qa/ipad-*.yaml` and an iPhone runs everything else: the split view
 exists only at regular width, so the two sets cannot pass on each other's device. The iPhone Duo is chosen by its window
-instead (see "iPhone Duo"). Naming flows runs exactly those; flows in subfolders (`qa/promax/`) only run by name.
+instead (see "iPhone Duo"). Naming flows runs exactly those; the flows in `qa/promax/` only run by name.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
