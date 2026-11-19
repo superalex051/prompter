@@ -82,6 +82,15 @@ struct LaunchOptionsTests {
         #expect(fromMaestro == fromShell)
     }
 
+    @Test func landscapeOnlyOverride() {
+        #expect(LaunchOptions(arguments: []).landscapeOnly == nil)
+        #expect(LaunchOptions(arguments: ["-landscapeOnly", "NO"]).landscapeOnly == false)
+        #expect(LaunchOptions(arguments: ["-landscapeOnly", "0"]).landscapeOnly == false)
+        #expect(LaunchOptions(arguments: ["-landscapeOnly", "YES"]).landscapeOnly == true)
+        #expect(LaunchOptions(arguments: ["landscapeOnly", "false", "-demoData"]).landscapeOnly == false)
+        #expect(LaunchOptions(arguments: ["-landscapeOnly", "-demoData"]).landscapeOnly == true)
+    }
+
     @Test func unrelatedArgumentsAreIgnored() {
         let options = LaunchOptions(arguments: ["/path/Prompter", "-foo", "bar", "demo", "route2"])
         #expect(options == LaunchOptions(arguments: []))

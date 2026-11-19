@@ -61,6 +61,10 @@ enum OrientationLock {
         if let side = policy.lastSide, side != loadLastSide() {
             sideDefaults.set(side.rawValue, forKey: lastSideKey)
         }
+        if DuoProbe.isEnabled {
+            let current = scene.map { "\($0.effectiveGeometry.interfaceOrientation.rawValue)" } ?? "no scene"
+            DuoProbe.log("lock \(action) · mask \(policy.mask.rawValue) · interface \(current) (1 portrait, 2 upside down, 3 left, 4 right)")
+        }
         switch action {
         case .none:
             break
@@ -69,7 +73,18 @@ enum OrientationLock {
         case .rotate(let orientations):
             refreshSupportedOrientations(in: scene)
             // Fails harmlessly where rotation isn't possible (e.g. an iPad window in Stage Manager).
-            scene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientations)) { _ in }
+            let probing = DuoProbe.isEnabled
+            scene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientations)) { error in
+                guard probing else { return }
+                let text = error.localizedDescription
+                Task { @MainActor in DuoProbe.log("lock request refused: \(text)") }
+            }
+            if DuoProbe.isEnabled, let scene {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(800))
+                    DuoProbe.log("lock after 0.8 s · interface \(scene.effectiveGeometry.interfaceOrientation.rawValue)")
+                }
+            }
         }
     }
 

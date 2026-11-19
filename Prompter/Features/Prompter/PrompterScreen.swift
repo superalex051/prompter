@@ -30,6 +30,7 @@ struct PrompterScreen: View {
 
     private func open() {
         guard controller == nil else { return }
+        Self.applyLaunchLandscapeOnly(to: settingsStore)
         let script = scriptStore.script(id: scriptID)
         let controller = PrompterController(
             scriptTitle: script?.displayTitle ?? "Untitled",
@@ -39,6 +40,18 @@ struct PrompterScreen: View {
         self.controller = controller
         // Safe before the first layout pass: the engine waits for text, then counts down.
         if autoStart { controller.engine.start() }
+    }
+
+    /// `-demoData -landscapeOnly NO` (screenshots, foldable checks): the first prompter of the launch opens with "Landscape
+    /// only" set that way. Only the throwaway demo settings are touched, and only once, so a later toggle by hand stays.
+    @MainActor private static var appliedLaunchLandscapeOnly = false
+
+    private static func applyLaunchLandscapeOnly(to settingsStore: SettingsStore) {
+        guard !appliedLaunchLandscapeOnly else { return }
+        appliedLaunchLandscapeOnly = true
+        let options = LaunchOptions()
+        guard options.demoData, let isOn = options.landscapeOnly else { return }
+        settingsStore.settings.lockLandscape = isOn
     }
 }
 
@@ -85,6 +98,7 @@ private struct PrompterStage: View {
                 .presentationCompactAdaptation(.popover)
         }
         .onChange(of: isShowingSettings) { _, isShowing in
+            if DuoProbe.isEnabled { DuoProbe.log("prompter settings \(isShowing ? "shown" : "hidden")") }
             if !isShowing { controller.focusKeys() }
         }
         // Settings sheet → engine (live), engine speed steps (keys, later the watch) → saved settings.
@@ -106,6 +120,7 @@ private struct PrompterStage: View {
             try? await Task.sleep(for: .milliseconds(800))
             openSettings()
         }
+        .duoProbe(DuoProbe.isEnabled, label: "prompter ")
     }
 
     // MARK: Canvas
@@ -264,6 +279,7 @@ private struct PrompterStage: View {
     /// closing always hands it back (remembering the old value on every appear could leave it stuck off: a second
     /// appear without a disappear would remember "disabled" as the value to restore).
     private func appear() {
+        if DuoProbe.isEnabled { DuoProbe.log("prompter appear, landscape only \(settings.lockLandscape)") }
         UIApplication.shared.isIdleTimerDisabled = true
         OrientationLock.prompterOpened(landscapeOnly: settings.lockLandscape)
         remoteHub?.attach(engine: engine, scriptTitle: controller.scriptTitle)
@@ -271,6 +287,7 @@ private struct PrompterStage: View {
     }
 
     private func disappear() {
+        if DuoProbe.isEnabled { DuoProbe.log("prompter disappear, state \(engine.state)") }
         UIApplication.shared.isIdleTimerDisabled = false
         OrientationLock.prompterClosed()
         remoteHub?.detach(engine: engine)

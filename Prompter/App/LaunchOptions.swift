@@ -44,6 +44,9 @@ struct LaunchOptions: Equatable, Sendable {
     /// Debug builds: "-duoProbe" logs the window's shape (size, size classes, the fold, the hinge) on every change to
     /// Documents/duo-probe.log. See DuoProbe.swift.
     var duoProbe: Bool = false
+    /// "-landscapeOnly NO" (or YES): with `-demoData`, the prompter opens with "Landscape only" set this way (the throwaway
+    /// settings start with it on). Used to check the prompter on a foldable with the lock off. nil: the setting as it is.
+    var landscapeOnly: Bool?
 
     init(arguments: [String] = LaunchArguments.process) {
         if let value = Self.value(after: "route", in: arguments), let route = Route(rawValue: value.lowercased()) {
@@ -61,6 +64,9 @@ struct LaunchOptions: Equatable, Sendable {
         autoStart = Self.flag("autoStart", in: arguments)
         noWatchPush = Self.flag("noWatchPush", in: arguments)
         duoProbe = Self.flag("duoProbe", in: arguments)
+        if LaunchArguments.flagIndex("landscapeOnly", in: arguments) != nil {
+            landscapeOnly = Self.flag("landscapeOnly", in: arguments)
+        }
     }
 
     /// `voiceFile` as a file URL: absolute paths as they are, relative ones under `home` (the app's data container).

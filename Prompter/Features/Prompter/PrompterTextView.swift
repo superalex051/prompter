@@ -93,8 +93,17 @@ final class PrompterTextView: UIView {
         // at the reading line could disagree with the engine. So every time: lay out the whole document again and hand
         // the engine the result (it ignores a layout that didn't change, so the place and the state stay put).
         if replacesText, let layoutManager = textView.textLayoutManager {
+            let probeBefore = DuoProbe.isEnabled ? probeReadingPoint() : nil
+            let started = CACurrentMediaTime()
             textView.layoutIfNeeded()
             engine.updateLayout(PrompterLayoutExtractor.layout(of: layoutManager, document: document))
+            if let probeBefore {
+                let ms = Int(((CACurrentMediaTime() - started) * 1000).rounded())
+                DuoProbe.log("relayout \(Int(size.width))x\(Int(size.height)) font \(Int(style.fontSize.rounded())) "
+                    + "lines \(engine.layout.lines.count) \(ms) ms · \(engine.state) · before \(probeBefore) · after \(probeReadingPoint())")
+            }
+        } else if DuoProbe.isEnabled {
+            DuoProbe.log("restyle \(Int(size.width))x\(Int(size.height)) reading line \(Int(style.readingLineY)) · \(probeReadingPoint())")
         }
         // Never ease a relayout: the content itself moved under the offset.
         smoother.reset(to: engine.position)
@@ -106,6 +115,7 @@ final class PrompterTextView: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        if DuoProbe.isEnabled { DuoProbe.log("text view \(window != nil ? "in a window" : "out of the window")") }
         if window != nil {
             startDisplayLink()
             // Keys: become first responder once the presentation has settled.
@@ -143,6 +153,7 @@ final class PrompterTextView: UIView {
         let frameTime = link.targetTimestamp
         let dt = previousFrameTime.map { frameTime - $0 } ?? (link.targetTimestamp - link.timestamp)
         previousFrameTime = frameTime
+        if DuoProbe.isEnabled { probeFrame(at: frameTime, dt: dt) }
 
         engine.tick(now: frameTime)
         let target = engine.position
@@ -287,6 +298,43 @@ final class PrompterTextView: UIView {
         default:
             break
         }
+    }
+
+    // MARK: Probe (debug, `-duoProbe`)
+
+    private var probeFrames = 0
+    private var probeSince: CFTimeInterval?
+    private var probeLongestFrame = 0.0
+
+    /// Once a second while the link runs: how many frames came, the longest gap, where the text is.
+    private func probeFrame(at time: CFTimeInterval, dt: CFTimeInterval) {
+        probeFrames += 1
+        probeLongestFrame = max(probeLongestFrame, dt)
+        guard let since = probeSince else { probeSince = time; return }
+        guard time - since >= 1 else { return }
+        DuoProbe.log("frames \(probeFrames) in \(String(format: "%.2f", time - since)) s, longest \(Int((probeLongestFrame * 1000).rounded())) ms"
+            + " · \(engine.state) · \(probeReadingPoint())")
+        probeFrames = 0
+        probeLongestFrame = 0
+        probeSince = time
+    }
+
+    /// The place at the reading line: position, the line's first character plus the fraction through it, the character
+    /// that interpolates to, and the start of that line's text.
+    private func probeReadingPoint() -> String {
+        let layout = engine.layout
+        let position = engine.position
+        guard let index = layout.lineIndex(at: position) else { return "pos \(Int(position)) (no layout)" }
+        let anchor = layout.anchor(at: position)
+        let start = layout.lines[index].characterIndex
+        let end = index + 1 < layout.lines.count ? layout.lines[index + 1].characterIndex : document.text.utf16.count
+        let point = Double(start) + anchor.fraction * Double(end - start)
+        let utf16 = Array(document.text.utf16)
+        let lower = min(max(start, 0), utf16.count)
+        let upper = min(lower + 28, utf16.count)
+        let text = String(decoding: utf16[lower..<upper], as: UTF16.self).replacingOccurrences(of: "\n", with: " / ")
+        return "pos \(String(format: "%.1f", position)) line \(index) char \(start)+\(String(format: "%.2f", anchor.fraction)) "
+            + "= \(String(format: "%.1f", point)) \"\(text)\""
     }
 
     // MARK: Keys
