@@ -90,7 +90,7 @@ shoot_posture() {  # shoot_posture <posture slug> <duo_apply_posture name>
     fi
     sleep "$wait"
     # (|| true: no log, a crash or a slow launch must give "no probe line", not stop the whole run under set -e)
-    probe="$( { grep -E '^[0-9:.]+ size ' "$data/Documents/duo-probe.log" 2>/dev/null | tail -1 | sed -E 's/^[0-9:.]+ //; s/ · Kind.*//'; } || true)"
+    probe="$( { grep -E '^[0-9:.]+ size ' "$data/Documents/duo-probe.log" 2>/dev/null | tail -1 | sed -E 's/^[0-9:.]+ //; s/ · division.*//'; } || true)"
     for d in $DISPLAYS; do
       name="$slug-$route-$(display_name "$d").png"
       if xcrun simctl io "$UDID" screenshot --display="$d" "$OUT/$name" >/dev/null 2>&1; then
