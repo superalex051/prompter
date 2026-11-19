@@ -63,6 +63,14 @@ final class PrompterTextView: UIView {
     func update(document newDocument: PrompterDocument, settings newSettings: PrompterSettings) {
         if newDocument != document { document = newDocument }
         settings = newSettings
+        // Resized but not laid out yet: the layout pass sizes the text view first, then applies all of this. SwiftUI can
+        // hand over settings in between (seen on iPhone Duo: the take folded back to the cover, then opened to Book with
+        // Landscape only on). Applied there, the text was measured in the old frame (and with the frame set first, TextKit
+        // still drew it lines away from the measured layout), so the take scrolled past the drawn text into blank.
+        guard textView.frame == bounds else {
+            setNeedsLayout()
+            return
+        }
         applyContentIfNeeded()
     }
 
@@ -328,10 +336,36 @@ final class PrompterTextView: UIView {
         guard let since = probeSince else { probeSince = time; return }
         guard time - since >= 1 else { return }
         DuoProbe.log("frames \(probeFrames) in \(String(format: "%.2f", time - since)) s, longest \(Int((probeLongestFrame * 1000).rounded())) ms"
-            + " · \(engine.state) · \(probeReadingPoint())")
+            + " · \(engine.state) · \(probeReadingPoint()) · \(probeTextKitCheck())")
         probeFrames = 0
         probeLongestFrame = 0
         probeSince = time
+    }
+
+    /// What TextKit really has against the engine's layout: the height of its laid-out text against the engine's end
+    /// (they differ while TextKit only estimates part of the text), and the line TextKit draws at the reading line,
+    /// counted in the engine's lines from the engine's own (0: the same line). Both stay within 1 while the text on
+    /// screen is the text the engine scrolls.
+    private func probeTextKitCheck() -> String {
+        let height = textView.contentSize.height - textView.textContainerInset.top - textView.textContainerInset.bottom
+        let end = engine.maxPosition
+        let gap = height.isFinite && abs(height - end) < 1e9 ? "\(Int((height - end).rounded()))" : "?"
+        var drawn = "none"
+        let y = textView.contentOffset.y + 0.5
+        if let manager = textView.textLayoutManager, let content = manager.textContentManager,
+           let fragment = manager.textLayoutFragment(for: CGPoint(x: 1, y: y)),
+           let line = fragment.textLineFragments.last(where: {
+               fragment.layoutFragmentFrame.minY + $0.typographicBounds.minY <= y
+           }) {
+            let character = content.offset(from: manager.documentRange.location, to: fragment.rangeInElement.location)
+                + line.characterRange.location
+            let lines = engine.layout.lines
+            if let drawnLine = lines.lastIndex(where: { $0.characterIndex <= character }),
+               let engineLine = engine.layout.lineIndex(at: engine.position) {
+                drawn = "\(drawnLine - engineLine)"
+            }
+        }
+        return "textkit height minus end \(gap), drawn line \(drawn)"
     }
 
     /// The place at the reading line: position, the line's first character plus the fraction through it, the character

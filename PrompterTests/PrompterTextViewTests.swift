@@ -119,7 +119,7 @@ struct PrompterTextViewTests {
 
     /// The line TextKit currently has at the reading line (from whatever layout it holds, estimated or not): its first
     /// character and its top in text-container coordinates.
-    private static func drawnLineAtReadingLine(of view: PrompterTextView) throws -> (characterIndex: Int, y: Double) {
+    static func drawnLineAtReadingLine(of view: PrompterTextView) throws -> (characterIndex: Int, y: Double) {
         let textView = try #require(view.subviews.compactMap { $0 as? UITextView }.first)
         let layoutManager = try #require(textView.textLayoutManager)
         let contentManager = try #require(layoutManager.textContentManager)
@@ -233,5 +233,28 @@ struct PrompterTextViewFoldTests {
             #expect(abs(try #require(engine.layout.readingPoint(at: engine.position)) - point) < 1e-6)
         }
         #expect(abs(engine.position - start) < 0.5)
+    }
+
+    /// SwiftUI can hand the view new settings after resizing it but before the layout pass (iPhone Duo: folded back to
+    /// the cover, then opened to Book with Landscape only on). The engine must get the layout TextKit draws at the new
+    /// size, not one measured at the old width, or the take scrolls past the drawn text into blank.
+    @Test func settingsBeforeTheLayoutPassMeasureTheNewSize() throws {
+        let (controller, view) = makeView(foldable: true)
+        let engine = controller.engine
+        layOut(view, 466, 678)
+        engine.stepLine(40)
+        let point = try #require(engine.layout.readingPoint(at: engine.position))
+
+        view.frame = CGRect(x: 0, y: 0, width: 669, height: 951)
+        view.update(document: controller.document, settings: PrompterSettings())
+        view.layoutIfNeeded()
+
+        let (fresh, freshView) = makeView(foldable: true)
+        layOut(freshView, 669, 951)
+        #expect(engine.layout.lines.count == fresh.engine.layout.lines.count)
+        #expect(abs(engine.layout.contentHeight - fresh.engine.layout.contentHeight) < 0.5)
+        #expect(abs(try #require(engine.layout.readingPoint(at: engine.position)) - point) < 1e-6)
+        let drawn = try PrompterTextViewTests.drawnLineAtReadingLine(of: view)
+        #expect(drawn.characterIndex == engine.layout.characterIndex(at: engine.position))
     }
 }
