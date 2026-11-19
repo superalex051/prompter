@@ -12,7 +12,7 @@ struct LibraryView: View {
 
     /// The open script, pushed on the stack or in the split view's detail; see `LibraryNavigation`.
     @State private var navigation = LibraryNavigation()
-    /// The window's full width, for `LibraryLayout` (nil until the first layout pass).
+    /// The window's full width, for `LibraryLayout` (nil until the first layout pass); see `updateWindowWidth`.
     @State private var windowWidth: CGFloat?
     /// The editor's keyboard across a layout switch; see `EditorKeyboard`. Not observed (see `EditorKeyboardHandoff`).
     @State private var keyboard = EditorKeyboardHandoff()
@@ -57,11 +57,17 @@ struct LibraryView: View {
 
     var body: some View {
         layout
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.width + proxy.safeAreaInsets.leading + proxy.safeAreaInsets.trailing
-            } action: { width in
-                windowWidth = width
+            .background {
+                // Tells when the window changes size. The width itself comes from the window scene: in the middle of a turn
+                // this view can be handed a stale size last (a Pro Max turned to portrait, 440 pt, ended on 832, the
+                // landscape safe area), and the open iPhone Duo held tall is only 31 pt under the split minimum.
+                Color.clear
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                        updateWindowWidth(measured: width)
+                    }
+                    .ignoresSafeArea()
             }
+            .onChange(of: horizontalSizeClass) { updateWindowWidth(measured: windowWidth) }
             .fullScreenCover(item: $prompterTarget) { target in
                 PrompterScreen(scriptID: target.id, autoStart: target.autoStart, opensSettings: target.opensSettings)
             }
@@ -92,7 +98,8 @@ struct LibraryView: View {
             .onChange(of: store.lastError) { _, newValue in showStoreError(newValue) }
             .onChange(of: layoutKind) { _, kind in
                 keyboard.state.layoutChanged(openScript: navigation.openScript)
-                debugNote("library layout \(kind), open \(navigation.openScript.map { "\($0)" } ?? "none"), "
+                debugNote("library layout \(kind) at \(windowWidth.map { "\(Int($0))" } ?? "?") pt, "
+                    + "open \(navigation.openScript.map { "\($0)" } ?? "none"), "
                     + "keyboard to \(String(describing: keyboard.state.pending?.field)), "
                     + "cursor \(keyboard.state.pending?.selection.map { "\($0)" } ?? "none"), "
                     + "columns \(String(describing: columnVisibility))")
@@ -378,6 +385,24 @@ struct LibraryView: View {
     }
 
     // MARK: Actions
+
+    /// Keeps `windowWidth` for `LibraryLayout`: the window scene's width, or `measured` (this view's own, ignoring the safe
+    /// area) where the scene can't be told apart.
+    private func updateWindowWidth(measured: CGFloat?) {
+        let width = Self.windowSceneWidth() ?? measured
+        guard width != windowWidth else { return }
+        windowWidth = width
+        debugNote("library window \(width.map { "\(Int($0))" } ?? "?") pt wide, "
+            + "view \(measured.map { "\(Int($0))" } ?? "?")")
+    }
+
+    /// The width of the app's window scene. A phone runs one scene; with more than one (an iPad) there is no telling which
+    /// is this one, and an iPad doesn't use the width (see `LibraryLayout`).
+    private static func windowSceneWidth() -> CGFloat? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard scenes.count == 1, let scene = scenes.first else { return nil }
+        return scene.effectiveGeometry.coordinateSpace.bounds.width
+    }
 
     private func newScript() {
         navigation.open(store.create().id)
