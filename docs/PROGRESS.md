@@ -724,6 +724,10 @@ What a person sees differently on the Duo:
   does not support, the lock stays as it was. The inner screen ignores the lock anyway.
 - **Folded, landscape left.** The time label in the HUD corner ends at about 583 pt, clear of the camera at 611 pt (it was at
   about 630). The countdown digit, state word and close button move only for an active fold (Book) or the camera.
+  The progress bar under the HUD ends at about 586 pt, 8 pt short of the camera's region (it ran to 634 pt, under the camera).
+- **Empty library held tall and partly folded (the laptop pose).** "No scripts yet" and its three buttons move down about
+  122 pt, off the fold, and go back to the centre when the Duo lies flat again. Only a device that reports a hinge reads the
+  fold, the prompter's rule. iPhone and iPad are pixel-identical on iOS 27.0; no iOS 27.1 iPhone or iPad simulator was run.
 - **Open screen text.** About 78 pt instead of 72, the iPad scaling. Folded stays 72 pt.
 - **Split View or a pinned video on the inner screen** no longer counts as a fold.
 - **Debug aids** (Debug builds only): `-duoProbe` (window shape, fold, hinge, orientation lock and layout switches to
@@ -786,8 +790,10 @@ rest on unit tests, the Pro Max stand-in and one early idle unfold.
    change. A popover at the top right would land in the status area (867,0 84x120), so a different anchor would be a design
    change.
 9. **Countdown digit near a fold.** It moves to the middle of the free side. Say if the smallest possible shift is preferred.
-10. **Empty library with the Duo held tall and partly folded.** "No scripts yet" may sit on the horizontal fold (y 455 to 495).
-    Not a regression. `.inbox/duo/library/fix/duo-open.sh` shoots it (`Book-tall-empty.png`) once the Mac is unlocked.
+10. **Empty library with the Duo held tall and partly folded.** Done (branch `duo/polish`): while the fold is active the
+    message and buttons sit about 122 pt lower, below the fold, and come back when the Duo lies flat. Checked on the Duo
+    simulator both ways round (folded after the empty library showed, and turned tall while already folded):
+    `.inbox/duo/round2/polish/run4/duo/`.
 11. **Maestro on the cover.** The prompter's close and Done buttons and the settings popover have no ids Maestro can reach, and
     the cover's back chevron has no "Scripts" label, so the flows use hand-converted points and three cover flows stop early.
     Ids and a label would fix that (an app change).
