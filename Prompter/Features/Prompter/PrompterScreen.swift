@@ -262,14 +262,18 @@ private struct PrompterStage: View {
     /// tree even with `accessibilityHidden` (UI tests still found it while the text played), so VoiceOver could land on an
     /// invisible control. It sits 12 pt inside the safe area's top leading corner, and steps off an active fold or the
     /// camera if one is there (`PrompterAvoidance.buttonOffset`), read in the same safe-area coordinates.
-    private var closeButton: some View {
-        GeometryReader { proxy in
+    @ViewBuilder private var closeButton: some View {
+        if isFoldable {
+            GeometryReader { proxy in
+                closeButtonContent
+                    .offset(PrompterAvoidance.buttonOffset(
+                        button: CGRect(x: 12, y: 12, width: 44, height: 44),
+                        screen: proxy.size,
+                        blocks: proxy.activeReservedRects
+                    ))
+            }
+        } else {
             closeButtonContent
-                .offset(PrompterAvoidance.buttonOffset(
-                    button: CGRect(x: 12, y: 12, width: 44, height: 44),
-                    screen: proxy.size,
-                    blocks: isFoldable ? proxy.activeReservedRects : []
-                ))
         }
     }
 

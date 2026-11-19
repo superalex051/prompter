@@ -73,7 +73,7 @@ enum OrientationLock {
         }
         if DuoProbe.isEnabled {
             let current = scene.map { "\($0.effectiveGeometry.interfaceOrientation.rawValue)" } ?? "no scene"
-            DuoProbe.log("lock \(action) · mask \(policy.mask.rawValue) · interface \(current) (1 portrait, 2 upside down, 3 left, 4 right)")
+            DuoProbe.log("lock \(action) · mask \(policy.mask.rawValue) · interface \(current) (1 portrait, 2 upside down, 3 landscape right, 4 landscape left)")
         }
         switch action {
         case .none:
