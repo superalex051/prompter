@@ -201,6 +201,20 @@ struct PrompterTextStyle: Equatable, Sendable {
         return max(min(shortSide / reference.height, longSide / reference.width), 1)
     }
 
+    /// A canvas whose short side is at least this many points is a large canvas (see `scalesToCanvas`). No iPhone screen
+    /// comes near it (the biggest is 440 pt across); the open iPhone Duo (951 × 669, either way up) is over it, folded
+    /// (466 × 678) it is under.
+    static let largeCanvasShortSide = 600.0
+
+    /// Whether the font takes the canvas scaling (`fontScale`): on an iPad, as always, and on any large canvas, which is
+    /// how the open iPhone Duo gets it while its idiom stays phone. Decided from the canvas, never from the device's
+    /// orientation, so both prompter views (the overlays and the text) agree on every size a fold passes through.
+    static func scalesToCanvas(isPad: Bool, canvasSize: CGSize) -> Bool {
+        if isPad { return true }
+        let shortSide = min(canvasSize.width, canvasSize.height)
+        return shortSide.isFinite && shortSide >= largeCanvasShortSide
+    }
+
     var fontWeight: PlatformFont.Weight {
         switch weight {
         case .regular: .regular

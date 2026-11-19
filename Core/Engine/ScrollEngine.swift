@@ -212,18 +212,34 @@ final class ScrollEngine {
 
     // MARK: Layout
 
-    /// New text layout (first layout, pinch, rotation, settings change). Keeps the text at the reading line on the same
-    /// line of the script, scaled within that line; the state doesn't change. Starts a waiting `start()`.
-    func updateLayout(_ newLayout: PrompterLayout) {
+    /// How `updateLayout` keeps the place when the text is laid out again.
+    enum RelayoutAnchor: Sendable {
+        /// The first character of the line at the reading line, plus how far through that line's span the position is
+        /// (`PrompterLayout.anchor`). What the iPhone, the iPad and the Mac have always used.
+        case lineStart
+        /// The exact character at the reading line (`PrompterLayout.readingPoint`), which does not drift when a fold
+        /// sends the canvas through several widths in a row. Falls back to `lineStart` where a layout can't give one.
+        case readingPoint
+    }
+
+    /// New text layout (first layout, pinch, rotation, a fold, settings change). Keeps the text at the reading line on the
+    /// same place in the script (see `RelayoutAnchor`); the state doesn't change, so a take that is playing plays on at the
+    /// same pace (WPM and finish-in recompute their speed from the new layout). Starts a waiting `start()`.
+    func updateLayout(_ newLayout: PrompterLayout, anchoring: RelayoutAnchor = .lineStart) {
         guard newLayout != layout else { return }
         let anchor = layout.lines.isEmpty ? heldAnchor : layout.anchor(at: position)
+        let readingPoint = anchoring == .readingPoint && !layout.lines.isEmpty ? layout.readingPoint(at: position) : nil
         layout = newLayout
         if newLayout.lines.isEmpty {
             heldAnchor = anchor
             position = 0
         } else {
             heldAnchor = nil
-            if let anchor { position = newLayout.position(of: anchor) }
+            if let readingPoint, let mapped = newLayout.position(ofReadingPoint: readingPoint) {
+                position = mapped
+            } else if let anchor {
+                position = newLayout.position(of: anchor)
+            }
             position = clampedPosition(position)
             if state == .finished { position = maxPosition }
             // A hold in progress stays on its cue (the anchor already put the position on the cue's line).

@@ -53,6 +53,42 @@ struct PrompterTextTests {
         #expect(PrompterTextStyle.fontScale(canvasSize: .zero, isPad: true) == 1)
     }
 
+    /// The finding: the prompter sized its text from the device idiom, so the open iPhone Duo (a 951 × 669 canvas, idiom
+    /// phone) got the iPhone's 72 pt and looked small, with a third more lines on screen. A large canvas now takes the
+    /// iPad's scaling; every iPhone canvas, the folded Duo and every iPad keep the size they had.
+    @Test(arguments: [
+        // (canvas, iPad idiom, scales to the canvas)
+        (CGSize(width: 874, height: 402), false, false),     // iPhone 17 Pro, landscape (the rig)
+        (CGSize(width: 402, height: 874), false, false),
+        (CGSize(width: 956, height: 440), false, false),     // the largest iPhone
+        (CGSize(width: 667, height: 375), false, false),
+        (CGSize(width: 678, height: 466), false, false),     // iPhone Duo folded, landscape
+        (CGSize(width: 466, height: 678), false, false),
+        (CGSize(width: 382, height: 678), false, false),     // a size seen half way through an unfold
+        (CGSize(width: 951, height: 669), false, true),      // iPhone Duo open
+        (CGSize(width: 669, height: 951), false, true),
+        (CGSize(width: 900, height: 600), false, true),      // the edge
+        (CGSize(width: 900, height: 599.5), false, false),
+        (CGSize(width: 1366, height: 1024), true, true),     // iPads, whatever the window
+        (CGSize(width: 320, height: 1024), true, true),
+        (CGSize.zero, false, false),
+    ])
+    func largeCanvasTakesTheCanvasScaling(canvas: CGSize, isPad: Bool, scales: Bool) {
+        #expect(PrompterTextStyle.scalesToCanvas(isPad: isPad, canvasSize: canvas) == scales)
+    }
+
+    @Test func textSizesOnTheDuo() {
+        func size(_ width: Double, _ height: Double) -> Double {
+            let canvas = CGSize(width: width, height: height)
+            let scales = PrompterTextStyle.scalesToCanvas(isPad: false, canvasSize: canvas)
+            return PrompterTextStyle(settings: PrompterSettings(), canvasSize: canvas, isPad: scales).fontSize
+        }
+        #expect(size(874, 402) == 72)                           // the iPhone in the rig: unchanged
+        #expect(size(678, 466) == 72)                           // folded
+        #expect(abs(size(951, 669) - 72 * 951 / 874) < 0.001)   // open: about 78 pt, the long side is the tighter fit
+        #expect(size(669, 951) == size(951, 669))               // open, either way up
+    }
+
     @Test func pinchSizeOverridesTheSettingAndIsClamped() {
         let size = CGSize(width: 874, height: 402)
         #expect(PrompterTextStyle(settings: PrompterSettings(), canvasSize: size, isPad: false, fontSize: 120).fontSize == 120)

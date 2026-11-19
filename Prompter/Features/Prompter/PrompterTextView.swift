@@ -20,6 +20,11 @@ final class PrompterTextView: UIView {
 
     let engine: ScrollEngine
     var callbacks = Callbacks()
+    /// On a device that folds, every relayout keeps the exact character at the reading line
+    /// (`ScrollEngine.RelayoutAnchor.readingPoint`): folding or unfolding mid-take sends the canvas through several widths
+    /// in a fraction of a second, and the line-start anchor slipped back a little on each one. Off on iPhone and iPad,
+    /// which keep the anchor they have always had.
+    var anchorsReadingPoint = false
 
     private let textView = UITextView(usingTextLayoutManager: true)
     private var displayLink: CADisplayLink?
@@ -67,13 +72,20 @@ final class PrompterTextView: UIView {
         applyContentIfNeeded()
     }
 
-    private var isPad: Bool { traitCollection.userInterfaceIdiom == .pad }
+    /// Whether the text on a canvas of `size` takes the iPad's font scaling: on an iPad, or on a large canvas (the open
+    /// iPhone Duo). The one rule for the text here and for the overlays in `PrompterStage`, which used to ask two different
+    /// idiom sources.
+    static func scalesFont(canvasSize size: CGSize) -> Bool {
+        PrompterTextStyle.scalesToCanvas(isPad: UIDevice.current.userInterfaceIdiom == .pad, canvasSize: size)
+    }
 
     /// Rebuilds the text and the engine's layout when needed, keeping the same line at the reading line.
     private func applyContentIfNeeded() {
         let size = bounds.size
         guard size.width > 0, size.height > 0 else { return }
-        let style = PrompterTextStyle(settings: settings, canvasSize: size, isPad: isPad, fontSize: pinchFontSize)
+        let style = PrompterTextStyle(
+            settings: settings, canvasSize: size, isPad: Self.scalesFont(canvasSize: size), fontSize: pinchFontSize
+        )
         guard style != appliedStyle || document != appliedDocument else { return }
 
         let replacesText = document != appliedDocument || style.needsNewText(comparedTo: appliedStyle)
@@ -96,7 +108,10 @@ final class PrompterTextView: UIView {
             let probeBefore = DuoProbe.isEnabled ? probeReadingPoint() : nil
             let started = CACurrentMediaTime()
             textView.layoutIfNeeded()
-            engine.updateLayout(PrompterLayoutExtractor.layout(of: layoutManager, document: document))
+            engine.updateLayout(
+                PrompterLayoutExtractor.layout(of: layoutManager, document: document),
+                anchoring: anchorsReadingPoint ? .readingPoint : .lineStart
+            )
             if let probeBefore {
                 let ms = Int(((CACurrentMediaTime() - started) * 1000).rounded())
                 DuoProbe.log("relayout \(Int(size.width))x\(Int(size.height)) font \(Int(style.fontSize.rounded())) "

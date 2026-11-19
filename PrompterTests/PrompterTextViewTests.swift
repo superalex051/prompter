@@ -176,3 +176,62 @@ struct PrompterTextViewMarkupTests {
         #expect(controller.engine.position == hold.y)
     }
 }
+
+/// The text view on a foldable (iPhone Duo): the font follows the canvas, and a fold keeps the exact place.
+@MainActor
+struct PrompterTextViewFoldTests {
+    private static let body = DemoData.scripts(now: Date(timeIntervalSince1970: 0))[0].body
+
+    private func makeView(foldable: Bool) -> (PrompterController, PrompterTextView) {
+        let controller = PrompterController(scriptTitle: "Test", body: Self.body, settings: PrompterSettings())
+        let view = PrompterTextView(engine: controller.engine)
+        controller.textView = view
+        view.anchorsReadingPoint = foldable
+        view.update(document: controller.document, settings: PrompterSettings())
+        return (controller, view)
+    }
+
+    private func layOut(_ view: PrompterTextView, _ width: Double, _ height: Double) {
+        view.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        view.layoutIfNeeded()
+    }
+
+    private func fontSize(of view: PrompterTextView) throws -> Double {
+        let textView = try #require(view.subviews.compactMap { $0 as? UITextView }.first)
+        let font = try #require(textView.attributedText.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)
+        return font.pointSize
+    }
+
+    /// The open Duo's canvas (951 × 669) gets the iPad's scaling; folded (678 × 466, 466 × 678) and every iPhone canvas
+    /// stay at the set size. These tests run on an iPhone simulator, so the idiom is phone throughout.
+    @Test func textSizeFollowsTheCanvas() throws {
+        let (_, view) = makeView(foldable: true)
+        layOut(view, 874, 402)
+        #expect(try fontSize(of: view) == 72)
+        layOut(view, 678, 466)
+        #expect(try fontSize(of: view) == 72)
+        layOut(view, 951, 669)
+        #expect(abs(try fontSize(of: view) - 72 * 951 / 874) < 0.001)
+        layOut(view, 669, 951)
+        #expect(abs(try fontSize(of: view) - 72 * 951 / 874) < 0.001)
+        layOut(view, 466, 678)
+        #expect(try fontSize(of: view) == 72)
+    }
+
+    /// Unfolding passes through several widths (probe: 466, 382, 466, 951 pt); folding comes back. With the reading point
+    /// on, the character at the reading line is the same at every step, and back at the first size so is the position.
+    @Test func aFoldAndBackKeepsTheExactPlace() throws {
+        let (controller, view) = makeView(foldable: true)
+        let engine = controller.engine
+        layOut(view, 678, 466)
+        engine.stepLine(9)
+        engine.scrub(by: 37)                    // part way down a line
+        let start = engine.position
+        let point = try #require(engine.layout.readingPoint(at: start))
+        for (width, height) in [(382.0, 678.0), (466, 678), (951, 669), (669, 951), (678, 466)] {
+            layOut(view, width, height)
+            #expect(abs(try #require(engine.layout.readingPoint(at: engine.position)) - point) < 1e-6)
+        }
+        #expect(abs(engine.position - start) < 0.5)
+    }
+}

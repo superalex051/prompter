@@ -67,13 +67,14 @@ private struct PrompterStage: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isShowingSettings = false
+    /// The device has a hinge (iPhone Duo): a fold mid-take keeps the exact place at the reading line.
+    @State private var isFoldable = false
     /// Bumped on every touch; the close button shows for 3 s after the last one.
     @State private var touchCount = 0
     @State private var recentlyTouched = false
 
     private var engine: ScrollEngine { controller.engine }
     private var settings: PrompterSettings { settingsStore.settings }
-    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     var body: some View {
         @Bindable var settingsStore = settingsStore
@@ -120,6 +121,7 @@ private struct PrompterStage: View {
             try? await Task.sleep(for: .milliseconds(800))
             openSettings()
         }
+        .modifier(FoldableDeviceReader(isFoldable: $isFoldable))
         .duoProbe(DuoProbe.isEnabled, label: "prompter ")
     }
 
@@ -144,7 +146,7 @@ private struct PrompterStage: View {
     }
 
     private func canvas(size: CGSize) -> some View {
-        let style = PrompterTextStyle(settings: settings, canvasSize: size, isPad: isPad)
+        let style = PrompterTextStyle(settings: settings, canvasSize: size, isPad: PrompterTextView.scalesFont(canvasSize: size))
         let foreground = Color(settings.scheme.foregroundUIColor)
         let background = Color(settings.scheme.backgroundUIColor)
         // The amber of the pause cues, deepened per scheme so it holds its contrast on white too.
@@ -153,7 +155,7 @@ private struct PrompterStage: View {
         let hudInset = max(style.sideInset, 44)
 
         return ZStack {
-            PrompterCanvas(controller: controller, settings: settings, callbacks: callbacks)
+            PrompterCanvas(controller: controller, settings: settings, callbacks: callbacks, isFoldable: isFoldable)
 
             ReadingLineOverlay(
                 readingLineY: style.readingLineY,
