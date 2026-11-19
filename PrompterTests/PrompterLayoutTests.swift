@@ -238,8 +238,10 @@ struct PrompterLayoutReadingPointTests {
         let folded = Self.wrapped(2_000, perLine: 15, pitch: 137.5)
         let open = Self.wrapped(2_000, perLine: 21, pitch: 146)
         let start = 40 * 137.5 + 0.8 * 137.5
-        let there = try #require(open.position(ofReadingPoint: try #require(folded.readingPoint(at: start))))
-        let back = try #require(folded.position(ofReadingPoint: try #require(open.readingPoint(at: there))))
+        let point = try #require(folded.readingPoint(at: start))
+        let there = try #require(open.position(ofReadingPoint: point))
+        let pointThere = try #require(open.readingPoint(at: there))
+        let back = try #require(folded.position(ofReadingPoint: pointThere))
         #expect(abs(back - start) < 1e-9)
     }
 
