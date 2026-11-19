@@ -33,6 +33,12 @@ struct LibraryView: View {
     @State private var launchRoute: LaunchRoute
     /// The settings sheet; `.sync` opens it straight on Sync with Mac (launch route).
     @State private var settingsSheet: SettingsSheet?
+    /// The device has a hinge (iPhone Duo): only then does the empty state read the fold. An iPhone on iOS 27.1 reports its
+    /// Dynamic Island as a reserved region too, and its library must stay exactly as it is (the prompter's rule). Kept here
+    /// rather than in the empty state, which is built again on every layout switch.
+    @State private var isFoldable = false
+    /// Set with `isFoldable` by `FoldableDeviceReader`; the library doesn't use it.
+    @State private var isHingeClosed: Bool?
 
     /// `launchRoute`: where to land on launch; the default stays in the library.
     init(launchRoute: LaunchRoute = LaunchRoute()) {
@@ -135,6 +141,7 @@ struct LibraryView: View {
             }
             // A store that waited for the first unlock has loaded: the launch route can find its script now.
             .onChange(of: isLoading) { applyLaunchRoute() }
+            .modifier(FoldableDeviceReader(isFoldable: $isFoldable, isHingeClosed: $isHingeClosed))
     }
 
     @ViewBuilder
@@ -325,9 +332,12 @@ struct LibraryView: View {
             .padding(.horizontal, 4)
     }
 
+    /// The message and its buttons step off a fold running across the window while it is active (the iPhone Duo held
+    /// tall and partly folded); see `EmptyStateFoldClearance`.
     private var emptyState: some View {
         ContentUnavailableView {
             Label("No scripts yet", systemImage: "text.page")
+                .anchorPreference(key: EmptyStateBlockKey.self, value: .bounds) { [$0] }
         } description: {
             Text("Write one, paste from the clipboard, or import a .txt, .md, .rtf or .pdf file.")
         } actions: {
@@ -335,9 +345,13 @@ struct LibraryView: View {
                 Text("New script").onAccentForeground()
             }
             .buttonStyle(.borderedProminent)
+            .anchorPreference(key: EmptyStateBlockKey.self, value: .bounds) { [$0] }
             Button("Paste as new script", action: pasteAsNewScript)
+                .anchorPreference(key: EmptyStateBlockKey.self, value: .bounds) { [$0] }
             Button("Import file…") { isImporting = true }
+                .anchorPreference(key: EmptyStateBlockKey.self, value: .bounds) { [$0] }
         }
+        .modifier(EmptyStateFoldClearance(readsFolds: isFoldable))
     }
 
     private var settingsButton: some View {
@@ -629,4 +643,146 @@ enum LibraryDebugLog {
     #if DEBUG
     private static let isOn = LaunchOptions().duoProbe
     #endif
+}
+
+// MARK: Empty library and the fold
+
+/// The empty library's message and buttons, gathered from the pieces of its `ContentUnavailableView`.
+private struct EmptyStateBlockKey: PreferenceKey {
+    static var defaultValue: [Anchor<CGRect>] { [] }
+    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
+        value += nextValue()
+    }
+}
+
+/// The ACTIVE folds over the empty library, and its size, in its own points.
+private struct FoldReading: Equatable, Sendable {
+    var size: CGSize = .zero
+    var folds: [CGRect] = []
+
+    init() {}
+
+    init(_ proxy: GeometryProxy) {
+        size = proxy.size
+        if #available(iOS 27.1, *) {
+            // Without `.includeInactive` only active ones come back: a Duo lying flat reports none.
+            folds = proxy.reservedRegions(kind: .division).filter(\.isActive).map(\.frame)
+        }
+    }
+}
+
+/// Keeps the empty library's message and buttons off a fold running across the window while it is active: the iPhone
+/// Duo held tall and partly folded (the laptop pose) puts that fold through the middle, where they are centred. See
+/// `EmptyLibraryPlacement`. With no active fold (every iPhone and iPad, the Duo folded or lying flat) the move is 0 and
+/// the empty state looks exactly as it always did. Only a device that reported a hinge reads the fold at all.
+///
+/// The fold is read outside the move, and the block is measured inside it, so in principle neither depends on the move.
+/// In practice the move can nudge the measured block by a pixel, and following that nudge moved it again, without end:
+/// the app hung on the iPhone Duo in the laptop pose. So the block only counts as changed when an edge moves by more
+/// than a point (`EmptyLibraryPlacement.isNewBlock`).
+private struct EmptyStateFoldClearance: ViewModifier {
+    /// The device reported a hinge (`FoldableDeviceReader`). Until then the fold isn't read and nothing moves.
+    let readsFolds: Bool
+
+    @State private var reading = FoldReading()
+    /// The message and buttons, in the empty state's own points.
+    @State private var block: CGRect = .null
+
+    func body(content: Content) -> some View {
+        content
+            // Measured inside the move, so the move itself never shifts what is measured (beyond a pixel's rounding).
+            .backgroundPreferenceValue(EmptyStateBlockKey.self) { anchors in
+                GeometryReader { proxy in
+                    let rect = anchors.reduce(CGRect.null) { $0.union(proxy[$1]) }
+                    Color.clear.onChange(of: rect, initial: true) { _, rect in
+                        if EmptyLibraryPlacement.isNewBlock(rect, replacing: block) { block = rect }
+                    }
+                }
+            }
+            .offset(y: shift)
+            // The fold is read from a view that stays where the empty state was laid out, outside the move. The reader is
+            // only there on a foldable, so it starts reading (with the fold as it is then) when the hinge first reports.
+            .background {
+                if readsFolds {
+                    Color.clear
+                        .onGeometryChange(for: FoldReading.self) { FoldReading($0) } action: { reading = $0 }
+                }
+            }
+            .onAppear { EmptyStateDebugLog.note("library empty state appeared, reads folds \(readsFolds)") }
+            .onChange(of: shift) { old, new in
+                let f = EmptyStateDebugLog.number
+                EmptyStateDebugLog.note("library empty state moved \(f(old)) to \(f(new)), block \(f(block.minY))...\(f(block.maxY)) "
+                    + "in \(f(reading.size.height)) pt, folds \(reading.folds.map { "\(f($0.minY))...\(f($0.maxY))" })")
+            }
+    }
+
+    private var shift: CGFloat {
+        EmptyLibraryPlacement.shift(block: block, bounds: CGRect(origin: .zero, size: reading.size), folds: reading.folds)
+    }
+}
+
+/// Debug builds with `-duoProbe`: the empty state's moves in the probe's log, at most 30 lines a launch, so a runaway
+/// can't flood the log.
+@MainActor
+private enum EmptyStateDebugLog {
+    private static var lines = 0
+
+    static func note(_ text: @autoclosure () -> String) {
+        guard lines < 30 else { return }
+        lines += 1
+        LibraryDebugLog.note(text())
+    }
+
+    static func number(_ value: CGFloat) -> String {
+        value.isFinite ? String(format: "%.6f", Double(value)) : "\(value)"
+    }
+}
+
+/// Where the empty library's message and buttons go when an active fold runs across them (iPhone Duo held tall and
+/// partly folded). Apple: keep interactive content off an active fold, and move only what is needed. Pure geometry, so
+/// it is tested without a window.
+enum EmptyLibraryPlacement {
+    /// Space kept between the moved block and the fold, in points.
+    static let gap: CGFloat = 8
+
+    /// How far to move `block` up (negative) or down so it clears every fold that runs across `bounds`, the shorter way,
+    /// staying inside `bounds`. Down wins a tie: in that pose the lower half rests on the table, the half Apple gives to
+    /// controls. `folds` are the active ones only, so nothing moves while the device lies flat. A fold running top to
+    /// bottom (Book) is left alone: the split view already puts its columns either side of it. 0 when nothing is in the
+    /// way, or when no move clears it.
+    static func shift(block: CGRect, bounds: CGRect, folds: [CGRect]) -> CGFloat {
+        let across = folds.filter { $0.width > $0.height }
+        guard !block.isNull, !block.isEmpty, across.contains(where: { touches($0, block) }) else { return 0 }
+        let room = bounds.insetBy(dx: -0.5, dy: -0.5)
+        func settle(down: Bool) -> CGFloat? {
+            var shift: CGFloat = 0
+            for _ in 0...(across.count + 1) {
+                let moved = block.offsetBy(dx: 0, dy: shift)
+                guard let hit = across.first(where: { touches($0, moved) }) else {
+                    return room.contains(moved) ? shift : nil
+                }
+                shift += down ? hit.maxY + gap - moved.minY : hit.minY - gap - moved.maxY
+            }
+            return nil
+        }
+        // Up replaces down only when it is shorter by more than a point.
+        let options = [settle(down: true), settle(down: false)].compactMap { $0 }
+        return options.min { abs($0) < abs($1) - 1 } ?? 0
+    }
+
+    /// Whether a fresh measurement of the block replaces the one held: only when it appears, goes, or an edge moves by
+    /// more than a point. Smaller differences are the move's own pixel rounding, and following them never settles.
+    static func isNewBlock(_ new: CGRect, replacing old: CGRect) -> Bool {
+        if new.isNull || old.isNull { return new.isNull != old.isNull }
+        return abs(new.minX - old.minX) > 1 || abs(new.maxX - old.maxX) > 1
+            || abs(new.minY - old.minY) > 1 || abs(new.maxY - old.maxY) > 1
+    }
+
+    /// The fold comes within `gap` of the block (only touching at the gap's edge doesn't count: a block moved a gap
+    /// clear of a fold touches it exactly, give or take rounding, hence the thousandth of a point).
+    private static func touches(_ fold: CGRect, _ block: CGRect) -> Bool {
+        let e: CGFloat = 0.001
+        let near = block.insetBy(dx: 0, dy: -gap)
+        return fold.minX < near.maxX - e && near.minX < fold.maxX - e && fold.minY < near.maxY - e && near.minY < fold.maxY - e
+    }
 }
