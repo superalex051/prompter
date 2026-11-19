@@ -78,9 +78,14 @@ the simulator is turned. Without `DUO_POSTURE` the Duo is used in the posture it
   pressed and `DUO_POSTURE` fails. The Duo simulator boots folded, so without `DUO_POSTURE` the flows run on the cover only
   (a 466 pt window: the phone flows). Open, open tall and Book can only be run with the Mac unlocked and awake
   (`caffeinate -d`). `DUO_POSTURE` also needs the Debug build, because it measures the window with `-duoProbe`.
-- **Cover results today.** `prompter` and `voice` pass. `editor`, `library` and `settings` stop at known steps (the editor's
-  tap at 50%,88% lands on the footer, the cover's back button is a bare chevron so `tapOn: 'Scripts'` finds nothing, and
-  "Weight" scrolls out of view). They are limits of the flows, not app bugs.
+- **Cover results today.** `editor`, `library`, `settings`, `prompter` and `voice` all pass on the cover (466 x 678).
+  Where the cover differs, the flow has a `DUO=1` branch and the iPhone and iPad steps stay as they were: the back button is a
+  bare chevron, so the Duo taps it by id (`BackButton`) instead of by the label ("Scripts", "Settings"); the editor's text fills
+  the screen, so the sentence is typed on the empty line between the first two paragraphs instead of at the end; in Settings the
+  Weight and Line spacing rows are checked before the scroll that centers the color tile (it pushes them off the top), the
+  "Reset all settings" button is scrolled into view without centering (it sits at the end of the form), and the form scrolls
+  back up to Done before it is tapped (the bar with Done is not in the hierarchy while the form is scrolled).
+  `journey.yaml` stays off the Duo: its settings-popover taps are iPhone 17 Pro points.
 
 ## Where the screenshots land
 

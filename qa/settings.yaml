@@ -52,12 +52,27 @@ name: Settings
 # The rest of the form, one section at a time. scrollUntilVisible with centerElement only scrolls when the element is not
 # already fully on screen, so each target below is one that starts off screen (the color tile is cut off by the sheet's
 # bottom edge) and ends up in the middle.
+# The Duo's cover (DUO=1) is shorter, so centering the color tile pushes Weight and Line spacing off the top: they are
+# checked first, with the sliders in view, and the iPhone and iPad keep their single scroll.
+- runFlow:
+    when:
+      true: ${typeof DUO !== 'undefined' && DUO == '1'}
+    commands:
+      - scrollUntilVisible:
+          element: 'Line spacing.*'
+          direction: DOWN
+      - assertVisible: 'Weight.*'
+      - assertVisible: 'Line spacing.*'
 - scrollUntilVisible:
     element: 'White on black'
     direction: DOWN
     centerElement: true
-- assertVisible: 'Weight.*'
-- assertVisible: 'Line spacing.*'
+- runFlow:
+    when:
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
+    commands:
+      - assertVisible: 'Weight.*'
+      - assertVisible: 'Line spacing.*'
 - assertVisible: 'Side margins.*'
 - assertVisible: 'Colors'
 - takeScreenshot: settings-text
@@ -100,7 +115,18 @@ name: Settings
     element: '\[pause 2\].*'
     direction: DOWN
 - takeScreenshot: settings-controls-guide
-- tapOn: 'Settings'   # the back button's label
+# The back button's label is the title of the page it returns to, except on the Duo's cover (DUO=1), where it is a bare chevron.
+- runFlow:
+    when:
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
+    commands:
+      - tapOn: 'Settings'
+- runFlow:
+    when:
+      true: ${typeof DUO !== 'undefined' && DUO == '1'}
+    commands:
+      - tapOn:
+          id: 'BackButton'
 - extendedWaitUntil:
     visible: 'How to use'
     timeout: 5000
@@ -128,6 +154,14 @@ name: Settings
 - takeScreenshot: settings-sample-script
 
 # Done closes the sheet and the library is back underneath.
+# The Duo's cover (DUO=1) hides the bar with Done while the form is scrolled, so scroll back up to it first.
+- runFlow:
+    when:
+      true: ${typeof DUO !== 'undefined' && DUO == '1'}
+    commands:
+      - scrollUntilVisible:
+          element: 'Done'
+          direction: UP
 - tapOn: 'Done'
 - extendedWaitUntil:
     visible: 'Scripts'
@@ -148,10 +182,23 @@ name: Settings
 - takeScreenshot: settings-reopened
 
 # Put everything back. The list button and the confirmation dialog's button both read "Reset all settings".
-- scrollUntilVisible:
-    element: 'Reset all settings'
-    direction: DOWN
-    centerElement: true
+# On the Duo's cover (DUO=1) the button ends up at the very end of the form and can never be centered, so it is only scrolled
+# into view there.
+- runFlow:
+    when:
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
+    commands:
+      - scrollUntilVisible:
+          element: 'Reset all settings'
+          direction: DOWN
+          centerElement: true
+- runFlow:
+    when:
+      true: ${typeof DUO !== 'undefined' && DUO == '1'}
+    commands:
+      - scrollUntilVisible:
+          element: 'Reset all settings'
+          direction: DOWN
 - takeScreenshot: settings-reset-section
 - tapOn: 'Reset all settings'
 - assertVisible: 'Reset all settings\?'
@@ -170,6 +217,14 @@ name: Settings
     text: '5 s'
     selected: true
 - takeScreenshot: settings-after-reset
+# The Duo's cover (DUO=1) hides the bar with Done while the form is scrolled, so scroll back up to it first.
+- runFlow:
+    when:
+      true: ${typeof DUO !== 'undefined' && DUO == '1'}
+    commands:
+      - scrollUntilVisible:
+          element: 'Done'
+          direction: UP
 - tapOn: 'Done'
 - extendedWaitUntil:
     visible: 'Scripts'

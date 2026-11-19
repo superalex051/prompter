@@ -27,9 +27,23 @@ name: Editor
 
 # Tap below the last line: UITextView puts the cursor at the end of the text. Maestro has no "End" key on iOS, so this is
 # the way to get there. The leading space keeps the new words apart from "Speak soon." (7 words, 33 characters).
-- tapOn:
-    point: '50%,88%'
-- inputText: ' Typed by Maestro for the QA run.'
+# On the iPhone Duo's cover (DUO=1) the script fills the screen, so 88% is the footer and the end of the text is below
+# the fold: the cursor goes on the empty line between the first two paragraphs instead (a tap there), and the sentence
+# goes there with its space after it, which is the same 33 characters.
+- runFlow:
+    when:
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
+    commands:
+      - tapOn:
+          point: '50%,88%'
+      - inputText: ' Typed by Maestro for the QA run.'
+- runFlow:
+    when:
+      true: ${typeof DUO !== 'undefined' && DUO == '1'}
+    commands:
+      - tapOn:
+          point: '50%,31%'
+      - inputText: 'Typed by Maestro for the QA run. '
 - assertVisible: '115 words · .* at 140 wpm'
 # Where the sentence landed can only be seen in the screenshot: the body is a single accessibility element and iOS hands
 # Maestro only the first ~400 characters of its value, so the end of the script cannot be asserted on.
@@ -46,7 +60,18 @@ name: Editor
 - takeScreenshot: editor-final
 
 # Back in the library the script is still there. It was edited, so it has moved to the top and says "now".
-- tapOn: 'Scripts'
+# The Duo's cover shows the back button as a bare chevron, so the label 'Scripts' is not on screen there (DUO=1).
+- runFlow:
+    when:
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
+    commands:
+      - tapOn: 'Scripts'
+- runFlow:
+    when:
+      true: ${typeof DUO !== 'undefined' && DUO == '1'}
+    commands:
+      - tapOn:
+          id: 'BackButton'
 - extendedWaitUntil:
     visible: 'Prompt Client testimonial ask'
     timeout: 10000

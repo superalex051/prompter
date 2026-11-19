@@ -42,7 +42,18 @@ name: Library
 - assertVisible: 'Start typing your script…'
 - assertVisible: '0 words · 0:00 at 140 wpm'
 - takeScreenshot: library-new-script-editor
-- tapOn: 'Scripts'   # the back button carries the title of the screen it returns to
+# The back button carries the title of the screen it returns to, except on the Duo's cover (DUO=1), where it is a bare chevron.
+- runFlow:
+    when:
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
+    commands:
+      - tapOn: 'Scripts'
+- runFlow:
+    when:
+      true: ${typeof DUO !== 'undefined' && DUO == '1'}
+    commands:
+      - tapOn:
+          id: 'BackButton'
 - extendedWaitUntil:
     visible: 'Prompt Welcome to Prompter'
     timeout: 10000
