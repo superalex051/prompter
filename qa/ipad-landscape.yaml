@@ -5,6 +5,9 @@
 # The screenshots are portrait frames with the picture turned a quarter turn; `sips -r 270 shot.png --out upright.png`.
 appId: ${APP_ID}
 name: iPad landscape
+# DUO is 1 when scripts/qa.sh runs this on the iPhone Duo (open): the posture is set by qa.sh, so the flow looks at the
+# window as it is and does not turn the simulator. qa.sh always passes -e DUO (a value in an env: header here would win
+# over it), so run this flow through scripts/qa.sh.
 ---
 - launchApp:
     clearState: true
@@ -14,7 +17,11 @@ name: iPad landscape
 - extendedWaitUntil:
     visible: '165 words · 1:11 at 140 wpm'
     timeout: 20000
-- setOrientation: LANDSCAPE_LEFT
+- runFlow:
+    when:
+      true: ${DUO != '1'}
+    commands:
+      - setOrientation: LANDSCAPE_LEFT
 - waitForAnimationToEnd
 # Both columns side by side: the list, and the newest script's editor.
 - assertVisible: 'Prompt Welcome to Prompter'
@@ -63,5 +70,9 @@ name: iPad landscape
     optional: true
 - takeScreenshot: ipad-landscape-prompter-settings
 
-- setOrientation: PORTRAIT
+- runFlow:
+    when:
+      true: ${DUO != '1'}
+    commands:
+      - setOrientation: PORTRAIT
 - waitForAnimationToEnd

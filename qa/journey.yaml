@@ -149,7 +149,7 @@ name: Journey
 - takeScreenshot: journey-11-settings-speed-3s
 # Done (landscape (759, 66)). The HUD is back, and it already says Speed: the change was applied live.
 - tapOn:
-    point: '336,759'
+    point: '${TAP_DONE}'
 - extendedWaitUntil:
     visible:
       id: prompter.hud
@@ -186,7 +186,7 @@ name: Journey
 
 # --- Close: the close button at landscape (96, 34) is the portrait point 368,96. The library is portrait again. ---
 - tapOn:
-    point: '368,96'
+    point: '${TAP_CLOSE}'
 - extendedWaitUntil:
     visible: 'Prompt Shoot day test'
     timeout: 10000
