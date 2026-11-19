@@ -40,14 +40,21 @@ struct PrompterLayout: Equatable, Sendable {
     /// `timedHeight(of:contentHeight:isTimed:)`). Notes and cues scroll past at the same speed but hold no words, so the
     /// WPM pace is `wordCount` words per `timedHeight`, and each spoken line takes as long with notes as without.
     var timedHeight: Double
+    /// The UTF-16 length of the laid-out text: where the last line ends, for `readingPoint(at:)`. nil when unknown
+    /// (hand-built layouts); the last line then has no reading point.
+    var characterCount: Int?
 
     /// `timedHeight` nil: every line is text (it is then `contentHeight`).
-    init(lines: [Line], contentHeight: Double, wordCount: Int, holds: [Hold] = [], timedHeight: Double? = nil) {
+    init(
+        lines: [Line], contentHeight: Double, wordCount: Int, holds: [Hold] = [], timedHeight: Double? = nil,
+        characterCount: Int? = nil
+    ) {
         self.lines = lines
         self.contentHeight = contentHeight
         self.wordCount = wordCount
         self.holds = holds
         self.timedHeight = timedHeight ?? contentHeight
+        self.characterCount = characterCount
     }
 
     static let empty = PrompterLayout(lines: [], contentHeight: 0, wordCount: 0)
@@ -118,7 +125,43 @@ struct PrompterLayout: Equatable, Sendable {
         return min(max(position, 0), max(contentHeight, 0))
     }
 
+    /// The reading point at `position`: the character the position falls on, read as a fraction between the first
+    /// character of its line and the first character of the next line (`characterCount` after the last line). So 30 %
+    /// through a line of characters 80 to 99 is character 86.0.
+    ///
+    /// Unlike `anchor(at:)`, a reading point survives a change of line width exactly: `anchor` keeps the line's FIRST
+    /// character, which in a wider or narrower layout sits partway along another line, so each relayout pulls the place
+    /// back towards the start of a line. A fold passes through several widths in a fraction of a second, and those steps
+    /// added up to about a line. Mapping a reading point there and back through any layouts gives the same character.
+    /// nil when there are no lines, or on the last line when `characterCount` is unknown.
+    func readingPoint(at position: Double) -> Double? {
+        guard let index = lineIndex(at: position), let end = endCharacter(ofLine: index) else { return nil }
+        let start = lines[index].characterIndex
+        return Double(start) + anchor(at: position).fraction * Double(max(end - start, 0))
+    }
+
+    /// Where `readingPoint` is in this layout: on the line holding that character, as far through the line's span as the
+    /// point is through its characters. Clamped to 0…contentHeight. nil when there are no lines, or when the point falls on
+    /// the last line and `characterCount` is unknown (the caller then keeps the place by `anchor`).
+    func position(ofReadingPoint readingPoint: Double) -> Double? {
+        guard readingPoint.isFinite, let last = lines.last else { return nil }
+        // Whole characters only from here (and never past the last line's start, so a huge value can't overflow Int).
+        let character = readingPoint >= Double(last.characterIndex)
+            ? last.characterIndex : Int(max(readingPoint, 0).rounded(.down))
+        guard let index = lineIndex(containingCharacter: character), let end = endCharacter(ofLine: index) else { return nil }
+        let start = lines[index].characterIndex
+        let length = Double(end - start)
+        let fraction = length > 0 ? min(max((readingPoint - Double(start)) / length, 0), 1) : 0
+        let position = lines[index].y + fraction * span(ofLine: index)
+        return min(max(position, 0), max(contentHeight, 0))
+    }
+
     // MARK: Private
+
+    /// The first character after this line: the next line's first character, or `characterCount` after the last line.
+    private func endCharacter(ofLine index: Int) -> Int? {
+        index + 1 < lines.count ? lines[index + 1].characterIndex : characterCount
+    }
 
     /// The last line starting at or before character `index`, clamped to the first line; nil if no lines.
     private func lineIndex(containingCharacter index: Int) -> Int? {

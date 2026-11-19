@@ -30,6 +30,7 @@ struct PrompterScreen: View {
 
     private func open() {
         guard controller == nil else { return }
+        Self.applyLaunchOrientationOptions(to: settingsStore)
         let script = scriptStore.script(id: scriptID)
         let controller = PrompterController(
             scriptTitle: script?.displayTitle ?? "Untitled",
@@ -40,6 +41,39 @@ struct PrompterScreen: View {
         // Safe before the first layout pass: the engine waits for text, then counts down.
         if autoStart { controller.engine.start() }
     }
+
+    /// `-demoData -landscapeOnly NO` (screenshots, foldable checks): the first prompter of the launch opens with "Landscape
+    /// only" set that way; `-landscapeSide left` makes its lock pick that side. Only the throwaway demo settings and side
+    /// store are touched, and only once, so a later toggle by hand stays.
+    @MainActor private static var appliedLaunchOrientationOptions = false
+
+    private static func applyLaunchOrientationOptions(to settingsStore: SettingsStore) {
+        guard !appliedLaunchOrientationOptions else { return }
+        appliedLaunchOrientationOptions = true
+        let options = LaunchOptions()
+        guard options.demoData else { return }
+        if let isOn = options.landscapeOnly { settingsStore.settings.lockLandscape = isOn }
+        if let side = options.landscapeSide { OrientationLock.rememberSide(side == .left ? .landscapeLeft : .landscapeRight) }
+    }
+}
+
+/// The canvas's share of `PrompterAvoidance`: the active fold and camera in canvas points, the way back to the screen
+/// (to break ties towards the screen's trailing side, whatever the mirror), and the countdown digit's area. All empty
+/// unless something is in the way, so the canvas lays out exactly as it always has on iPhone and iPad.
+private struct CanvasAvoidance {
+    var blocks: [CGRect] = []
+    var toScreen: CGAffineTransform = .identity
+    var countdownArea: CGRect?
+}
+
+/// What the orientation lock hears about the prompter's window. The orientation is in it so a half turn (same size,
+/// other way up, which the inner screen of a foldable does on its own) is reported too: the reader's body runs again when
+/// the camera's region moves round the screen.
+private struct WindowReport: Equatable {
+    var size: CGSize
+    var isFoldable: Bool
+    var isHingeClosed: Bool?
+    var orientation: UIInterfaceOrientation?
 }
 
 /// Everything on screen once the controller exists.
@@ -54,19 +88,30 @@ private struct PrompterStage: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isShowingSettings = false
+    /// The device has a hinge (iPhone Duo): a fold mid-take keeps the exact place at the reading line.
+    @State private var isFoldable = false
+    /// Foldables: the hinge is closed (the cover is in use). Tells the orientation lock which screen the window is on.
+    @State private var isHingeClosed: Bool?
     /// Bumped on every touch; the close button shows for 3 s after the last one.
     @State private var touchCount = 0
     @State private var recentlyTouched = false
 
     private var engine: ScrollEngine { controller.engine }
     private var settings: PrompterSettings { settingsStore.settings }
-    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     var body: some View {
         @Bindable var settingsStore = settingsStore
 
         GeometryReader { proxy in
-            transformedCanvas(screenSize: proxy.size)
+            // Only a foldable steps around the fold and its camera: an iPhone on iOS 27.1 reports its Dynamic Island as
+            // a reserved region too, and its prompter must stay exactly as it is.
+            transformedCanvas(screenSize: proxy.size, avoiding: isFoldable ? proxy.activeReservedRects : [])
+                // A fold moves the window to the other screen; the orientation lock follows (foldables only).
+                .onChange(of: windowReport(size: proxy.size), initial: true) { _, report in
+                    OrientationLock.windowChanged(
+                        size: report.size, isFoldable: report.isFoldable, isHingeClosed: report.isHingeClosed
+                    )
+                }
         }
         .ignoresSafeArea()
         .overlay(alignment: .topLeading) { closeButton }
@@ -85,6 +130,7 @@ private struct PrompterStage: View {
                 .presentationCompactAdaptation(.popover)
         }
         .onChange(of: isShowingSettings) { _, isShowing in
+            if DuoProbe.isEnabled { DuoProbe.log("prompter settings \(isShowing ? "shown" : "hidden")") }
             if !isShowing { controller.focusKeys() }
         }
         // Settings sheet → engine (live), engine speed steps (keys, later the watch) → saved settings.
@@ -106,30 +152,54 @@ private struct PrompterStage: View {
             try? await Task.sleep(for: .milliseconds(800))
             openSettings()
         }
+        .modifier(FoldableDeviceReader(isFoldable: $isFoldable, isHingeClosed: $isHingeClosed))
+        .duoProbe(DuoProbe.isEnabled, label: "prompter ")
+    }
+
+    /// Off a foldable only the size matters (and `windowChanged` ignores it), so the orientation isn't read there.
+    private func windowReport(size: CGSize) -> WindowReport {
+        WindowReport(
+            size: size, isFoldable: isFoldable, isHingeClosed: isHingeClosed,
+            orientation: isFoldable ? OrientationLock.interfaceOrientation : nil
+        )
     }
 
     // MARK: Canvas
 
     /// The canvas, rotated (for 90°/270° its frame swaps width and height first), then mirrored/flipped, as one unit.
-    private func transformedCanvas(screenSize: CGSize) -> some View {
+    /// `blocks`: the active fold and the camera, in screen points (see `PrompterAvoidance`); empty on iPhone and iPad.
+    private func transformedCanvas(screenSize: CGSize, avoiding blocks: [CGRect]) -> some View {
         let rotation = settings.rotation
-        let canvasSize = PrompterCanvasTransform.isSideways(rotation)
-            ? CGSize(width: screenSize.height, height: screenSize.width)
-            : screenSize
+        let canvasSize = PrompterCanvasTransform.canvasSize(rotation: rotation, screenSize: screenSize)
         let transform = PrompterCanvasTransform.make(
             rotation: rotation,
             mirror: settings.mirrorHorizontal,
             flip: settings.flipVertical,
             canvasSize: canvasSize
         )
-        return canvas(size: canvasSize)
+        return canvas(size: canvasSize, avoidance: canvasAvoidance(screenSize: screenSize, blocks: blocks))
             .frame(width: canvasSize.width, height: canvasSize.height)
             .transformEffect(transform)
             .frame(width: screenSize.width, height: screenSize.height)
     }
 
-    private func canvas(size: CGSize) -> some View {
-        let style = PrompterTextStyle(settings: settings, canvasSize: size, isPad: isPad)
+    /// The fold and the camera brought into canvas points, and where the countdown digit goes.
+    private func canvasAvoidance(screenSize: CGSize, blocks: [CGRect]) -> CanvasAvoidance {
+        guard !blocks.isEmpty else { return CanvasAvoidance() }
+        let toScreen = PrompterCanvasTransform.canvasToScreen(
+            rotation: settings.rotation, mirror: settings.mirrorHorizontal, flip: settings.flipVertical,
+            screenSize: screenSize
+        )
+        let toCanvas = toScreen.inverted()
+        return CanvasAvoidance(
+            blocks: blocks.map { $0.applying(toCanvas) },
+            toScreen: toScreen,
+            countdownArea: PrompterAvoidance.countdownArea(screen: screenSize, blocks: blocks)?.applying(toCanvas)
+        )
+    }
+
+    private func canvas(size: CGSize, avoidance: CanvasAvoidance) -> some View {
+        let style = PrompterTextStyle(settings: settings, canvasSize: size, isPad: PrompterTextView.scalesFont(canvasSize: size))
         let foreground = Color(settings.scheme.foregroundUIColor)
         let background = Color(settings.scheme.backgroundUIColor)
         // The amber of the pause cues, deepened per scheme so it holds its contrast on white too.
@@ -138,7 +208,7 @@ private struct PrompterStage: View {
         let hudInset = max(style.sideInset, 44)
 
         return ZStack {
-            PrompterCanvas(controller: controller, settings: settings, callbacks: callbacks)
+            PrompterCanvas(controller: controller, settings: settings, callbacks: callbacks, isFoldable: isFoldable)
 
             ReadingLineOverlay(
                 readingLineY: style.readingLineY,
@@ -160,14 +230,20 @@ private struct PrompterStage: View {
                 background: background,
                 accent: accent,
                 horizontalInset: hudInset,
-                fontSize: min(max(shortSide * 0.042, 15), 28)
+                fontSize: min(max(shortSide * 0.042, 15), 28),
+                avoiding: avoidance.blocks,
+                toScreen: avoidance.toScreen
             )
             .frame(maxHeight: .infinity, alignment: .bottom)
             .allowsHitTesting(false)
 
-            CountdownOverlay(engine: engine, foreground: foreground, background: background, canvasSize: size)
-                .allowsHitTesting(false)
+            CountdownOverlay(
+                engine: engine, foreground: foreground, background: background, canvasSize: size,
+                digitArea: avoidance.countdownArea
+            )
+            .allowsHitTesting(false)
         }
+        .coordinateSpace(.named(PrompterHUD.canvasSpace))
         .background(background)
     }
 
@@ -202,8 +278,24 @@ private struct PrompterStage: View {
 
     /// Out of the view tree while hidden, not just transparent: the faded-out button used to stay in the accessibility
     /// tree even with `accessibilityHidden` (UI tests still found it while the text played), so VoiceOver could land on an
-    /// invisible control.
-    private var closeButton: some View {
+    /// invisible control. It sits 12 pt inside the safe area's top leading corner, and steps off an active fold or the
+    /// camera if one is there (`PrompterAvoidance.buttonOffset`), read in the same safe-area coordinates.
+    @ViewBuilder private var closeButton: some View {
+        if isFoldable {
+            GeometryReader { proxy in
+                closeButtonContent
+                    .offset(PrompterAvoidance.buttonOffset(
+                        button: CGRect(x: 12, y: 12, width: 44, height: 44),
+                        screen: proxy.size,
+                        blocks: proxy.activeReservedRects
+                    ))
+            }
+        } else {
+            closeButtonContent
+        }
+    }
+
+    private var closeButtonContent: some View {
         ZStack(alignment: .topLeading) {
             if showsCloseButton {
                 Button(action: close) {
@@ -264,6 +356,7 @@ private struct PrompterStage: View {
     /// closing always hands it back (remembering the old value on every appear could leave it stuck off: a second
     /// appear without a disappear would remember "disabled" as the value to restore).
     private func appear() {
+        if DuoProbe.isEnabled { DuoProbe.log("prompter appear, landscape only \(settings.lockLandscape)") }
         UIApplication.shared.isIdleTimerDisabled = true
         OrientationLock.prompterOpened(landscapeOnly: settings.lockLandscape)
         remoteHub?.attach(engine: engine, scriptTitle: controller.scriptTitle)
@@ -271,6 +364,7 @@ private struct PrompterStage: View {
     }
 
     private func disappear() {
+        if DuoProbe.isEnabled { DuoProbe.log("prompter disappear, state \(engine.state)") }
         UIApplication.shared.isIdleTimerDisabled = false
         OrientationLock.prompterClosed()
         remoteHub?.detach(engine: engine)

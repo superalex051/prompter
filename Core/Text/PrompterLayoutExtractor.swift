@@ -122,7 +122,8 @@ enum PrompterLayoutExtractor {
             contentHeight: bottom,
             wordCount: wordCount,
             holds: holds.sorted { $0.y < $1.y },
-            timedHeight: timedHeight
+            timedHeight: timedHeight,
+            characterCount: contentManager.offset(from: start, to: documentRange.endLocation)
         )
     }
 }

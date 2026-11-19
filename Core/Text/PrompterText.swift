@@ -201,6 +201,20 @@ struct PrompterTextStyle: Equatable, Sendable {
         return max(min(shortSide / reference.height, longSide / reference.width), 1)
     }
 
+    /// A canvas whose short side is at least this many points is a large canvas (see `scalesToCanvas`). No iPhone screen
+    /// comes near it (the biggest is 440 pt across); the open iPhone Duo (951 × 669, either way up) is over it, folded
+    /// (466 × 678) it is under.
+    static let largeCanvasShortSide = 600.0
+
+    /// Whether the font takes the canvas scaling (`fontScale`): on an iPad, as always, and on any large canvas, which is
+    /// how the open iPhone Duo gets it while its idiom stays phone. Decided from the canvas, never from the device's
+    /// orientation, so both prompter views (the overlays and the text) agree on every size a fold passes through.
+    static func scalesToCanvas(isPad: Bool, canvasSize: CGSize) -> Bool {
+        if isPad { return true }
+        let shortSide = min(canvasSize.width, canvasSize.height)
+        return shortSide.isFinite && shortSide >= largeCanvasShortSide
+    }
+
     var fontWeight: PlatformFont.Weight {
         switch weight {
         case .regular: .regular
@@ -323,5 +337,27 @@ enum PrompterCanvasTransform {
     /// True for 90° and 270°, where the canvas is the screen with width and height swapped.
     static func isSideways(_ rotation: PrompterSettings.Rotation) -> Bool {
         rotation == .quarter || rotation == .threeQuarters
+    }
+
+    /// The canvas for a screen of `screenSize`: the screen itself, with width and height swapped for 90° and 270°.
+    static func canvasSize(rotation: PrompterSettings.Rotation, screenSize: CGSize) -> CGSize {
+        isSideways(rotation) ? CGSize(width: screenSize.height, height: screenSize.width) : screenSize
+    }
+
+    /// Canvas points to screen points: the canvas sits centred on the screen (so a sideways canvas starts off screen)
+    /// and `make(...)` turns it about its centre. Use `.inverted()` to bring screen rects, such as the fold or the
+    /// camera, into the canvas, where the countdown and the HUD are laid out.
+    static func canvasToScreen(
+        rotation: PrompterSettings.Rotation,
+        mirror: Bool,
+        flip: Bool,
+        screenSize: CGSize
+    ) -> CGAffineTransform {
+        let canvas = canvasSize(rotation: rotation, screenSize: screenSize)
+        return make(rotation: rotation, mirror: mirror, flip: flip, canvasSize: canvas)
+            .concatenating(CGAffineTransform(
+                translationX: (screenSize.width - canvas.width) / 2,
+                y: (screenSize.height - canvas.height) / 2
+            ))
     }
 }

@@ -7,6 +7,9 @@ import UIKit
 /// covering the screen (`.occlusion`), the hinge and the scene phase. It is how the foldable QA learns what the app is given
 /// in each posture: `xcrun simctl get_app_container <udid> <bundle id> data` holds the log.
 struct DuoProbeModifier: ViewModifier {
+    /// Put in front of every line, so the prompter's own probe ("prompter") reads apart from the window's.
+    var label = ""
+
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.scenePhase) private var scenePhase
@@ -23,24 +26,26 @@ struct DuoProbeModifier: ViewModifier {
                             proxy, safeInsets: insets, horizontal: horizontalSizeClass, vertical: verticalSizeClass
                         )
                         Color.clear
-                            .onChange(of: line, initial: true) { _, line in DuoProbe.log(line) }
+                            .onChange(of: line, initial: true) { _, line in DuoProbe.log(label + line) }
                     }
                     .ignoresSafeArea()
                 }
             }
-            .modifier(DuoProbeHingeModifier())
-            .onChange(of: scenePhase, initial: true) { _, phase in DuoProbe.log("phase \(phase)") }
+            .modifier(DuoProbeHingeModifier(label: label))
+            .onChange(of: scenePhase, initial: true) { _, phase in DuoProbe.log(label + "phase \(phase)") }
     }
 }
 
 private struct DuoProbeHingeModifier: ViewModifier {
+    let label: String
+
     func body(content: Content) -> some View {
         if #available(iOS 27.1, *) {
             content.onHingeChange { _, new in
                 if let hinge = new.hinge {
-                    DuoProbe.log("hinge \(hinge.status) angle \(Int(hinge.angle.degrees.rounded()))°")
+                    DuoProbe.log(label + "hinge \(hinge.status) angle \(Int(hinge.angle.degrees.rounded()))°")
                 } else {
-                    DuoProbe.log("hinge none")
+                    DuoProbe.log(label + "hinge none")
                 }
             }
         } else {
@@ -51,6 +56,9 @@ private struct DuoProbeHingeModifier: ViewModifier {
 
 @MainActor
 enum DuoProbe {
+    /// `-duoProbe` was passed: the prompter logs its relayouts, frames and orientation lock here too.
+    static let isEnabled = LaunchOptions().duoProbe
+
     static func describe(
         _ proxy: GeometryProxy, safeInsets i: EdgeInsets, horizontal: UserInterfaceSizeClass?, vertical: UserInterfaceSizeClass?
     ) -> String {
@@ -113,14 +121,21 @@ enum DuoProbe {
 
 extension View {
     /// `-duoProbe` (debug builds): log the window's shape on every change. See `DuoProbeModifier`.
-    @ViewBuilder func duoProbe(_ isOn: Bool) -> some View {
-        if isOn { modifier(DuoProbeModifier()) } else { self }
+    @ViewBuilder func duoProbe(_ isOn: Bool, label: String = "") -> some View {
+        if isOn { modifier(DuoProbeModifier(label: label)) } else { self }
     }
 }
 #else
 import SwiftUI
 
 extension View {
-    func duoProbe(_ isOn: Bool) -> some View { self }
+    func duoProbe(_ isOn: Bool, label: String = "") -> some View { self }
+}
+
+/// Release builds read no launch arguments, so the probe is always off.
+@MainActor
+enum DuoProbe {
+    static let isEnabled = false
+    static func log(_ line: @autoclosure () -> String) {}
 }
 #endif
