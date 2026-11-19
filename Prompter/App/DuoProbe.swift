@@ -80,7 +80,9 @@ enum DuoProbe {
                     let f = r.frame
                     return "\(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height))\(r.isActive ? "" : " inactive")"
                 }
-                parts.append("\(kind): " + (text.isEmpty ? "none" : text.joined(separator: " | ")))
+                // The kind's own description is SwiftUI's internal type name, so it is named here.
+                let name = kind == .division ? "division" : "occlusion"
+                parts.append("\(name): " + (text.isEmpty ? "none" : text.joined(separator: " | ")))
             }
         }
         return parts.joined(separator: " · ")
