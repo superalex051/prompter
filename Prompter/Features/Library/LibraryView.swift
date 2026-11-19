@@ -100,6 +100,8 @@ struct LibraryView: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { columnVisibility = .all }
             }
+            // A layout switch keeps the open script, so the keyboard handoff survives it; opening another script resets it.
+            .onChange(of: navigation.openScript) { keyboard.state.openScriptChanged() }
             #if DEBUG
             .onChange(of: columnVisibility) { _, columns in debugNote("library columns \(String(describing: columns))") }
             #endif

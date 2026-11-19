@@ -52,6 +52,25 @@ struct EditorKeyboardTests {
         #expect(keyboard.take(for: b) == EditorKeyboard.Handoff(scriptID: b, field: nil))
     }
 
+    /// An editor that goes away while typing (another script picked in the split view) never reports the keyboard going
+    /// down. Opening the script again with the keyboard down, then folding, must not raise it.
+    @Test func openingAnotherScriptForgetsTheOldFocus() {
+        var keyboard = EditorKeyboard()
+        keyboard.focusChanged(to: .body, in: a)
+        keyboard.openScriptChanged()   // b opened
+        keyboard.openScriptChanged()   // a opened again, keyboard down
+        keyboard.layoutChanged(openScript: a)
+        #expect(keyboard.take(for: a) == EditorKeyboard.Handoff(scriptID: a, field: nil))
+    }
+
+    @Test func openingAnotherScriptDropsAHandoffNobodyTook() {
+        var keyboard = EditorKeyboard()
+        keyboard.focusChanged(to: .body, in: a)
+        keyboard.layoutChanged(openScript: a)
+        keyboard.openScriptChanged()
+        #expect(keyboard.take(for: a) == nil)
+    }
+
     @Test func aSwitchWithNothingOpenLeavesNothing() {
         var keyboard = EditorKeyboard()
         keyboard.focusChanged(to: .body, in: a)

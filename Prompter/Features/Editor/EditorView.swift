@@ -65,6 +65,14 @@ struct EditorKeyboard: Equatable, Sendable {
         current = Handoff(scriptID: scriptID, field: field)
     }
 
+    /// The library opened another script, or closed the open one. What an earlier editor reported no longer applies: an
+    /// editor that goes away while typing never reports the keyboard going down, so a later fold would have raised the
+    /// keyboard for a script that was opened again with it down.
+    mutating func openScriptChanged() {
+        current = nil
+        pending = nil
+    }
+
     /// The library switched layout with `openScript` open: its new editor should type where the old one did.
     mutating func layoutChanged(openScript: Script.ID?) {
         guard let openScript else {

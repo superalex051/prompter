@@ -55,6 +55,8 @@ struct LibraryLayoutTests {
         #expect(switches(in: layouts) == 1)
     }
 
+    /// Assumed frames: only the unfold was measured. Folding and turning the open Duo could not be captured (the first
+    /// probe stalled after the turn, and later Device Hub could not be driven while the Mac was locked).
     @Test func foldingSwitchesOnce() {
         let frames: [(regular: Bool, width: CGFloat)] = [(true, 951), (true, 466), (false, 466)]
         let layouts = frames.map { LibraryLayout.choose(isRegularWidth: $0.regular, windowWidth: $0.width, isPad: false) }
@@ -62,6 +64,7 @@ struct LibraryLayoutTests {
         #expect(layouts.last == .stack)
     }
 
+    /// Assumed frames, like the fold above.
     @Test func turningTheOpenDuoTallAndBackSwitchesOnceEachWay() {
         let frames: [(regular: Bool, width: CGFloat)] = [(true, 951), (true, 669), (true, 669), (true, 951)]
         let layouts = frames.map { LibraryLayout.choose(isRegularWidth: $0.regular, windowWidth: $0.width, isPad: false) }
