@@ -205,13 +205,14 @@ private struct EditorContent: View {
             // A brand-new script opens ready to type, and an editor rebuilt by a layout switch (the iPhone Duo folding or
             // unfolding) types where the old one did. The short pause lets the push animation settle, because focus set
             // during the transition is often dropped; it also gives the library time to leave the handoff.
-            guard opensBlank || keyboard != nil, !didAutofocus else { return }
-            didAutofocus = true
-            try? await Task.sleep(for: .milliseconds(450))
-            if let handoff = keyboard?.state.take(for: scriptID) {
-                focus = handoff.field
-            } else if opensBlank {
-                focus = .body
+            if opensBlank, !didAutofocus {
+                didAutofocus = true
+                try? await Task.sleep(for: .milliseconds(450))
+                focus = keyboard?.state.take(for: scriptID).map(\.field) ?? .body
+            } else if let keyboard {
+                // An existing script changes nothing here unless a layout switch left it the keyboard.
+                try? await Task.sleep(for: .milliseconds(450))
+                if let handoff = keyboard.state.take(for: scriptID) { focus = handoff.field }
             }
         }
     }
