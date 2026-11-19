@@ -19,7 +19,7 @@
 #             DUO_SPLIT_MIN_WIDTH points wide (default 700: the open Duo, 951, like an iPad) runs the ipad-*.yaml split view
 #             flows; a narrower one (the cover, 466, and the open Duo turned tall, 669) runs the phone flows.
 #             Maestro only sees the cover display, so on an open Duo (Open, OpenTall, or left open) the script stops with
-#             exit 3 and points to scripts/duo-shots.sh; DUO_OPEN_FLOWS=1 runs the flows anyway.
+#             exit 4 and points to scripts/duo-shots.sh; DUO_OPEN_FLOWS=1 runs the flows anyway.
 #   CONFIG    Debug (default), Release, "Store Debug" or "Store Release" (see scripts/lib.sh)
 #   The app's bundle ID is read from the built app and handed to every flow as ${APP_ID}.
 #   SKIP_BUILD=1   reuse the last scripts/build.sh output
@@ -27,7 +27,8 @@
 #   MAESTRO   path to the maestro binary, default ~/.maestro/bin/maestro (it is not on PATH here)
 #
 # Screenshots land in qa/output/<timestamp>/<timestamp from Maestro>/<flow name>/takeScreenshot/*.png (git-ignored).
-# Exit status is non-zero when a flow fails; the remaining flows still run.
+# Exit status is non-zero when a flow fails; the remaining flows still run. 3: another Maestro run stayed busy too long.
+# 4: the Duo is open, where Maestro can't see the screen.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib.sh
@@ -150,7 +151,7 @@ elif [ "$IS_DUO" = "1" ]; then
   if [ $(( WIN_W * WIN_H )) -gt 400000 ] && [ "${DUO_OPEN_FLOWS:-0}" != "1" ]; then
     echo "The Duo is open (${WIN_W}x${WIN_H}). Maestro only sees the cover display, so the flows cannot run on the open screen." >&2
     echo "Check the open screen with scripts/duo-shots.sh (both displays) and the -duoProbe log. DUO_OPEN_FLOWS=1 runs them anyway." >&2
-    exit 3
+    exit 4
   fi
   TURNS=0; [ "${PRO_W:-$WIN_W}" != "$WIN_W" ] && TURNS=1
   echo "Duo window: library ${WIN_W}x${WIN_H} ($WIN_CLASS width), prompter ${PRO_W:-?}x${PRO_H:-?}, safe l${PRO_SAFE_L:-?} t${PRO_SAFE_T:-?}, turns=$TURNS"

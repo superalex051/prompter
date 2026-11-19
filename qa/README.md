@@ -71,7 +71,7 @@ the simulator is turned. Without `DUO_POSTURE` the Duo is used in the posture it
   in the prompter turned a quarter turn like on an iPhone). For shots of every screen in every posture from both displays use
   `scripts/duo-shots.sh` (see `scripts/README.md`).
 - **Maestro sees only the cover.** On the open Duo, Maestro's hierarchy and screenshots are still the cover display (dark,
-  1398 x 2034), so every flow fails at its first check. `qa.sh` therefore stops with exit 3 when it measures an open window
+  1398 x 2034), so every flow fails at its first check. `qa.sh` therefore stops with exit 4 when it measures an open window
   (Open, OpenTall, or a Duo left open) and says to use `scripts/duo-shots.sh` and the `-duoProbe` log for the open screen.
   `DUO_OPEN_FLOWS=1` runs the flows anyway, for the day a Maestro release reaches the inner display. The `ipad-*` flows
   are written to pass on the open Duo held wide, but have not passed there for this reason.

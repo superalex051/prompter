@@ -707,7 +707,8 @@ Plan: `docs/superpowers/plans/2026-11-19-iphone-duo.md`. Branch `duo/optimize` (
 (prompter, library, QA tooling) in separate worktrees, each reviewed by independent agents and fixed, then merged and
 checked again as one. Nothing is pushed or merged into `launch`. The Duo is Apple's foldable: cover screen 466x678 pt, open
 screen 951x669 pt, iOS 27.1. The owner uses it open in the rig, folded in the rig and handheld for scripts; a fold mid-take
-keeps going; no new designs, so the iPad and phone layouts are reused. The iPhone, iPad and Mac behave as before.
+keeps going; no new designs, so the iPad and phone layouts are reused. The iPhone, iPad and Mac behave as before, apart from
+two prompter text fixes that apply on every device (below).
 
 What a person sees differently on the Duo:
 - **Library held tall and open (669 pt wide).** The script list shows as a normal phone list. Before, it showed an empty
@@ -719,6 +720,13 @@ What a person sees differently on the Duo:
 - **A take across a fold.** It keeps playing or stays paused at the same place and speed (the reading line keeps the exact
   character through the resizing). A take on the Pro Max kept playing at 60 frames a second while the library switched
   layout under it.
+- **The text after an unfold (every device).** With Landscape only on, a take folded back to the cover and opened to Book
+  went blank on the inner screen while the time kept counting. The text was measured in the cover's old frame, before the
+  layout pass; it now waits for the layout pass.
+- **The text after a fold, a turn or a pinch deep in a take (every device).** The screen could show text 5 to 10 lines ahead
+  of the line being read, until the next fold (on the Duo, with Landscape only on or off). In tests a pinch or a turn deep in
+  an iPhone take did the same by dozens of lines. New text is now laid out from the top and scrolled back before it is drawn.
+  Unit tests that replay the Duo walk and an iPhone pinch fail without it and pass with it, on iOS 27.0 and 27.1.
 - **Orientation.** With Landscape only on, a fold or unfold mid-take turns the lock to the direction that keeps the text going
   the same way, when the app has that orientation. When keeping the direction would need upside down, which an iPhone app
   does not support, the lock stays as it was. The inner screen ignores the lock anyway.
@@ -790,10 +798,9 @@ rest on unit tests, the Pro Max stand-in and one early idle unfold.
    change. A popover at the top right would land in the status area (867,0 84x120), so a different anchor would be a design
    change.
 9. **Countdown digit near a fold.** It moves to the middle of the free side. Say if the smallest possible shift is preferred.
-10. **Empty library with the Duo held tall and partly folded.** Done (branch `duo/polish`): while the fold is active the
-    message and buttons sit about 122 pt lower, below the fold, and come back when the Duo lies flat. Checked on the Duo
-    simulator both ways round (folded after the empty library showed, and turned tall while already folded):
-    `.inbox/duo/round2/polish/run4/duo/`.
+10. **Empty library with the Duo held tall and partly folded.** Done: while the fold is active the message and buttons sit
+    about 122 pt lower, below the fold, and come back when the Duo lies flat. Checked on the Duo simulator both ways round
+    (folded after the empty library showed, and turned tall while already folded).
 11. **Maestro on the cover.** The prompter's close and Done buttons and the settings popover have no ids Maestro can reach, and
-    the cover's back chevron has no "Scripts" label, so the flows use hand-converted points and three cover flows stop early.
-    Ids and a label would fix that (an app change).
+    the cover's back chevron has no "Scripts" label. All five cover flows pass now: the back button is tapped by its id, and
+    close, Done and the popover by hand-converted points. Ids for those would remove the points (an app change).
