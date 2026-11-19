@@ -18,6 +18,8 @@
 #             With no flow names the flows follow the measured window, not the simulator's name: a window at least
 #             DUO_SPLIT_MIN_WIDTH points wide (default 700: the open Duo, 951, like an iPad) runs the ipad-*.yaml split view
 #             flows; a narrower one (the cover, 466, and the open Duo turned tall, 669) runs the phone flows.
+#             Maestro only sees the cover display, so on an open Duo (Open, OpenTall, or left open) the script stops with
+#             exit 3 and points to scripts/duo-shots.sh; DUO_OPEN_FLOWS=1 runs the flows anyway.
 #   CONFIG    Debug (default), Release, "Store Debug" or "Store Release" (see scripts/lib.sh)
 #   The app's bundle ID is read from the built app and handed to every flow as ${APP_ID}.
 #   SKIP_BUILD=1   reuse the last scripts/build.sh output
@@ -142,6 +144,14 @@ elif [ "$IS_DUO" = "1" ]; then
   read -r WIN_W WIN_H WIN_CLASS _ <<<"$(duo_probe "$UDID" "$APP_ID" -route library)"
   read -r PRO_W PRO_H _ PRO_SAFE_L PRO_SAFE_T <<<"$(duo_probe "$UDID" "$APP_ID" -route prompter)"
   [ -n "${WIN_W:-}" ] || { echo "The Duo's window could not be measured (no -duoProbe log); is this the Debug build?" >&2; exit 1; }
+  # Maestro only reaches the cover display: on the open Duo its hierarchy and screenshots are the dark cover, so every flow
+  # fails at its first check (seen 2026-11-19 with Open and OpenTall). Stop with the reason instead of a list of failures.
+  # The cover is 466x678 either way round; the open screen is 951x669 either way round.
+  if [ $(( WIN_W * WIN_H )) -gt 400000 ] && [ "${DUO_OPEN_FLOWS:-0}" != "1" ]; then
+    echo "The Duo is open (${WIN_W}x${WIN_H}). Maestro only sees the cover display, so the flows cannot run on the open screen." >&2
+    echo "Check the open screen with scripts/duo-shots.sh (both displays) and the -duoProbe log. DUO_OPEN_FLOWS=1 runs them anyway." >&2
+    exit 3
+  fi
   TURNS=0; [ "${PRO_W:-$WIN_W}" != "$WIN_W" ] && TURNS=1
   echo "Duo window: library ${WIN_W}x${WIN_H} ($WIN_CLASS width), prompter ${PRO_W:-?}x${PRO_H:-?}, safe l${PRO_SAFE_L:-?} t${PRO_SAFE_T:-?}, turns=$TURNS"
   FLOW_ENV+=(-e "WIN_W=$WIN_W" -e "WIN_H=$WIN_H" -e "PRO_W=${PRO_W:-$WIN_W}" -e "PRO_H=${PRO_H:-$WIN_H}"
