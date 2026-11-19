@@ -19,7 +19,7 @@ struct PrompterHUD: View {
     var toScreen: CGAffineTransform = .identity
 
     /// The canvas's coordinate space (named on the canvas in `PrompterStage`): the frames the word is placed by.
-    static let canvasSpace = "prompterCanvas"
+    nonisolated static let canvasSpace = "prompterCanvas"
 
     @State private var rowFrame: CGRect = .zero
     @State private var wordWidth: CGFloat = 0
