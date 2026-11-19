@@ -48,6 +48,15 @@ struct LaunchOptions: Equatable, Sendable {
     /// so the screens that show only while a Mac is paired (the library's Remote for Mac button, Settings, Sync with Mac,
     /// Remote for Mac pushed from there) can be screenshotted. Nothing ever connects to it.
     var demoPairedMac: Bool = false
+    /// Debug builds: "-interfaceOrientation landscapeLeft" (or landscapeRight, portrait) turns the window that way once
+    /// the library shows, for screenshots of the iPhone Duo's cover held wide when the simulator's own rotate control
+    /// (in Device Hub) can't be reached. Any other value is ignored.
+    var interfaceOrientation: DebugOrientation?
+
+    /// The orientations `-interfaceOrientation` accepts.
+    enum DebugOrientation: String, Sendable, CaseIterable {
+        case portrait, landscapeLeft, landscapeRight
+    }
 
     init(arguments: [String] = LaunchArguments.process) {
         if let value = Self.value(after: "route", in: arguments), let route = Route(rawValue: value.lowercased()) {
@@ -66,6 +75,9 @@ struct LaunchOptions: Equatable, Sendable {
         noWatchPush = Self.flag("noWatchPush", in: arguments)
         duoProbe = Self.flag("duoProbe", in: arguments)
         demoPairedMac = Self.flag("demoPairedMac", in: arguments)
+        if let value = Self.value(after: "interfaceOrientation", in: arguments) {
+            interfaceOrientation = DebugOrientation.allCases.first { $0.rawValue.lowercased() == value.lowercased() }
+        }
     }
 
     /// `voiceFile` as a file URL: absolute paths as they are, relative ones under `home` (the app's data container).

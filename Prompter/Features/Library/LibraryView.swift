@@ -104,6 +104,7 @@ struct LibraryView: View {
                 // error that came in while it was covered. A shown error is cleared when its alert is dismissed.
                 showStoreError(store.lastError)
                 applyDemoPairing()
+                applyDebugOrientation()
                 applyLaunchRoute()
             }
             // A store that waited for the first unlock has loaded: the launch route can find its script now.
@@ -463,6 +464,21 @@ struct LibraryView: View {
             ),
             replacingAll: true
         )
+        #endif
+    }
+
+    /// Debug builds: `-interfaceOrientation landscapeLeft` turns the window (see `LaunchOptions`).
+    private func applyDebugOrientation() {
+        #if DEBUG
+        guard let orientation = Self.debugOptions.interfaceOrientation,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+        else { return }
+        let mask: UIInterfaceOrientationMask = switch orientation {
+        case .portrait: .portrait
+        case .landscapeLeft: .landscapeLeft
+        case .landscapeRight: .landscapeRight
+        }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
         #endif
     }
 

@@ -136,6 +136,15 @@ struct LaunchOptionsAutoStartTests {
         #expect(options.route == .syncSettings)
     }
 
+    /// Screenshots of the iPhone Duo's cover held wide without the simulator's rotate control.
+    @Test func interfaceOrientationOption() {
+        #expect(LaunchOptions(arguments: []).interfaceOrientation == nil)
+        #expect(LaunchOptions(arguments: ["-interfaceOrientation", "landscapeLeft"]).interfaceOrientation == .landscapeLeft)
+        #expect(LaunchOptions(arguments: ["-interfaceOrientation", "LANDSCAPERIGHT"]).interfaceOrientation == .landscapeRight)
+        #expect(LaunchOptions(arguments: ["-interfaceOrientation", "portrait"]).interfaceOrientation == .portrait)
+        #expect(LaunchOptions(arguments: ["-interfaceOrientation", "none"]).interfaceOrientation == nil)
+    }
+
     @Test func prompterSettingsRouteIsCaseInsensitive() {
         #expect(LaunchOptions(arguments: ["-route", "prompterSettings"]).route == .prompterSettings)
         #expect(LaunchOptions(arguments: ["-route", "promptersettings"]).route == .prompterSettings)
