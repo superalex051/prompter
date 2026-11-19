@@ -10,8 +10,14 @@ struct LibraryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-    /// The pushed editor (compact width) or the selected script (regular width); see `LibraryNavigation`.
+    /// The open script, pushed on the stack or in the split view's detail; see `LibraryNavigation`.
     @State private var navigation = LibraryNavigation()
+    /// The window's full width, for `LibraryLayout` (nil until the first layout pass); see `updateWindowWidth`.
+    @State private var windowWidth: CGFloat?
+    /// The editor's keyboard across a layout switch; see `EditorKeyboard`. Not observed (see `EditorKeyboardHandoff`).
+    @State private var keyboard = EditorKeyboardHandoff()
+    /// Which scripts have an editor on screen, for dropping a blank new script the person left; see `EditorPresence`.
+    @State private var editors = EditorPresenceTracker()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var prompterTarget: PrompterTarget?
     @State private var isImporting = false
@@ -20,7 +26,7 @@ struct LibraryView: View {
     @State private var renameTarget: Script?
     @State private var renameText = ""
     @State private var deletedScript: Script?
-    /// The last deleted script was the open one (regular width), so Undo opens it again.
+    /// The last deleted script was the open one (split view), so Undo opens it again.
     @State private var deletedWasOpen = false
     @State private var bannerHideTask: Task<Void, Never>?
     /// Where to land on launch (screenshots and UI checks), applied once both stores have loaded.
@@ -33,8 +39,17 @@ struct LibraryView: View {
         _launchRoute = State(initialValue: launchRoute)
     }
 
-    /// An iPad full screen or in a large split gets the split view; an iPhone or a slide-over keeps the navigation stack.
-    private var isRegular: Bool { horizontalSizeClass == .regular }
+    /// An iPad full screen or in a large split, or the iPhone Duo open and held wide, gets the split view; an iPhone, a
+    /// slide-over and the Duo folded or open and held tall keep the navigation stack. See `LibraryLayout`.
+    private var layoutKind: LibraryLayout {
+        LibraryLayout.choose(
+            isRegularWidth: horizontalSizeClass == .regular,
+            windowWidth: windowWidth,
+            isPad: UIDevice.current.userInterfaceIdiom == .pad
+        )
+    }
+
+    private var splits: Bool { layoutKind == .split }
 
     /// A store is still waiting for the first unlock after a restart (see `ScriptStore`), so the library may be empty
     /// only because it hasn't been read yet.
@@ -42,6 +57,17 @@ struct LibraryView: View {
 
     var body: some View {
         layout
+            .background {
+                // Tells when the window changes size. The width itself comes from the window scene: in the middle of a turn
+                // this view can be handed a stale size last (a Pro Max turned to portrait, 440 pt, ended on 832, the
+                // landscape safe area), and the open iPhone Duo held tall is only 31 pt under the split minimum.
+                Color.clear
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                        updateWindowWidth(measured: width)
+                    }
+                    .ignoresSafeArea()
+            }
+            .onChange(of: horizontalSizeClass) { updateWindowWidth(measured: windowWidth) }
             .fullScreenCover(item: $prompterTarget) { target in
                 PrompterScreen(scriptID: target.id, autoStart: target.autoStart, opensSettings: target.opensSettings)
             }
@@ -63,13 +89,48 @@ struct LibraryView: View {
             } message: { notice in
                 if let message = notice.message { Text(message) }
             }
+            // Outside the two layouts, so a layout switch (the iPhone Duo folding) doesn't take the alert away mid-rename.
+            .alert("Rename script", isPresented: $isRenaming, presenting: renameTarget) { target in
+                TextField("Title", text: $renameText)
+                Button("Save") { store.rename(target.id, to: renameText) }
+                Button("Cancel", role: .cancel) {}
+            }
             .onChange(of: store.lastError) { _, newValue in showStoreError(newValue) }
-            .onChange(of: isRegular) { _, regular in navigation.widthClassChanged(isRegular: regular) }
-            .focusedSceneValue(\.newScriptAction, isRegular && prompterTarget == nil ? newScript : nil)
+            .onChange(of: layoutKind) { _, kind in
+                keyboard.state.layoutChanged(openScript: navigation.openScript)
+                debugNote("library layout \(kind) at \(windowWidth.map { "\(Int($0))" } ?? "?") pt, "
+                    + "open \(navigation.openScript.map { "\($0)" } ?? "none"), "
+                    + "keyboard to \(String(describing: keyboard.state.pending?.field)), "
+                    + "cursor \(keyboard.state.pending?.selection.map { "\($0)" } ?? "none"), "
+                    + "columns \(String(describing: columnVisibility))")
+                // The split view always comes back with both columns. The finding: after one round trip (split, stack,
+                // split) the sidebar stayed hidden, so the second unfold of the iPhone Duo showed the editor or "Pick a
+                // script" with the list behind the sidebar button again.
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { columnVisibility = .all }
+            }
+            // A layout switch keeps the open script, so the keyboard handoff survives it; opening another script resets it.
+            .onChange(of: navigation.openScript) { old, _ in
+                keyboard.state.openScriptChanged()
+                // A blank new script whose editor already went away (a swipe back can end before the stack's path
+                // changes) is dropped here; one whose editor is still on screen goes when that editor does.
+                if let old {
+                    let left = editors.state.scriptClosed(old)
+                    debugNote("library closed a script, left \(left)")
+                    if left { store.deleteIfBlank(old) }
+                }
+            }
+            #if DEBUG
+            .onChange(of: columnVisibility) { _, columns in debugNote("library columns \(String(describing: columns))") }
+            #endif
+            .focusedSceneValue(\.newScriptAction, splits && prompterTarget == nil ? newScript : nil)
             .task {
                 // Runs again each time the library reappears (e.g. after the prompter closes), which also catches an
                 // error that came in while it was covered. A shown error is cleared when its alert is dismissed.
                 showStoreError(store.lastError)
+                applyDemoPairing()
+                applyDebugOrientation()
                 applyLaunchRoute()
             }
             // A store that waited for the first unlock has loaded: the launch route can find its script now.
@@ -78,17 +139,17 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var layout: some View {
-        if isRegular {
+        if splits {
             splitLayout
         } else {
             stackLayout
         }
     }
 
-    // MARK: Compact width: a navigation stack (as on iPhone)
+    // MARK: Stack: a navigation stack (as on iPhone)
 
     private var stackLayout: some View {
-        NavigationStack(path: $navigation.path) {
+        NavigationStack(path: Binding(get: { navigation.path }, set: { navigation.setPath($0) })) {
             content
                 .navigationTitle("Scripts")
                 .modifier(SyncSubtitle(client: syncClient))
@@ -100,13 +161,13 @@ struct LibraryView: View {
                     ToolbarItem(placement: .topBarTrailing) { addMenu }
                 }
                 .navigationDestination(for: Script.ID.self) { id in
-                    EditorView(scriptID: id, onPrompt: { prompterTarget = PrompterTarget(id: $0) })
+                    editor(for: id)
                 }
                 .safeAreaInset(edge: .bottom) { deleteBanner }
         }
     }
 
-    // MARK: Regular width: the list on the left, the open script's editor on the right
+    // MARK: Split: the list on the left, the open script's editor on the right
 
     private var splitLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -114,7 +175,8 @@ struct LibraryView: View {
         } detail: {
             detail
         }
-        // Both columns stay side by side in portrait too, so the list never hides behind a button.
+        // Both columns stay side by side in iPad portrait too, so the list never hides behind a button. (A window too
+        // narrow for that, like the iPhone Duo open and held tall, gets the stack instead: see `LibraryLayout`.)
         .navigationSplitViewStyle(.balanced)
     }
 
@@ -151,11 +213,6 @@ struct LibraryView: View {
             rows
         }
         .listStyle(.sidebar)
-        .alert("Rename script", isPresented: $isRenaming, presenting: renameTarget) { target in
-            TextField("Title", text: $renameText)
-            Button("Save") { store.rename(target.id, to: renameText) }
-            Button("Cancel", role: .cancel) {}
-        }
     }
 
     @ViewBuilder
@@ -163,7 +220,7 @@ struct LibraryView: View {
         if let id = navigation.selection, store.script(id: id) != nil {
             // `.id` gives every script its own editor: the editor keeps its drafts in @State, which must not carry
             // over from the previous script. Switching also drops a blank new script (the editor's onDisappear).
-            EditorView(scriptID: id, onPrompt: { prompterTarget = PrompterTarget(id: $0) })
+            editor(for: id)
                 .id(id)
         } else if store.scripts.isEmpty {
             emptyState
@@ -197,11 +254,17 @@ struct LibraryView: View {
             rows
         }
         .listStyle(.insetGrouped)
-        .alert("Rename script", isPresented: $isRenaming, presenting: renameTarget) { target in
-            TextField("Title", text: $renameText)
-            Button("Save") { store.rename(target.id, to: renameText) }
-            Button("Cancel", role: .cancel) {}
-        }
+    }
+
+    /// The open script's editor, pushed on the stack or in the split view's detail.
+    private func editor(for id: Script.ID) -> some View {
+        EditorView(
+            scriptID: id,
+            onPrompt: { prompterTarget = PrompterTarget(id: $0) },
+            isOpen: { navigation.isOpen($0) },
+            presence: editors,
+            keyboard: keyboard
+        )
     }
 
     /// The script rows, shared by the compact list and the split view's sidebar.
@@ -211,13 +274,13 @@ struct LibraryView: View {
                 script: script,
                 wordsPerMinute: settings.settings.wordsPerMinute,
                 markdown: settings.settings.markdown,
-                onOpen: { navigation.open(script.id, isRegular: isRegular) },
+                onOpen: { navigation.open(script.id) },
                 onPrompt: { prompterTarget = PrompterTarget(id: script.id) }
             )
             // The sidebar's own selection is a solid amber block, which swallows the amber Prompt button and the grey
             // text on it. A soft tint reads as "this one is open" and leaves the row legible. (Nothing is selected on a
             // phone, so this is the list's normal background there.)
-            .listRowBackground(navigation.selection == script.id ? selectionBackground : nil)
+            .listRowBackground(splits && navigation.selection == script.id ? selectionBackground : nil)
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                 Button(role: .destructive) {
                     delete(script)
@@ -323,8 +386,27 @@ struct LibraryView: View {
 
     // MARK: Actions
 
+    /// Keeps `windowWidth` for `LibraryLayout`: the window scene's width, or `measured` (this view's own, ignoring the safe
+    /// area) where the scene can't be told apart.
+    private func updateWindowWidth(measured: CGFloat?) {
+        let width = Self.windowSceneWidth() ?? measured
+        guard width != windowWidth else { return }
+        windowWidth = width
+        debugNote("library window \(width.map { "\(Int($0))" } ?? "?") pt wide, "
+            + "view \(measured.map { "\(Int($0))" } ?? "?"), "
+            + "window scenes \(UIApplication.shared.connectedScenes.filter { $0 is UIWindowScene }.count)")
+    }
+
+    /// The width of the app's window scene. A phone runs one scene; with more than one (an iPad) there is no telling which
+    /// is this one, and an iPad doesn't use the width (see `LibraryLayout`).
+    private static func windowSceneWidth() -> CGFloat? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard scenes.count == 1, let scene = scenes.first else { return nil }
+        return scene.effectiveGeometry.coordinateSpace.bounds.width
+    }
+
     private func newScript() {
-        navigation.open(store.create().id, isRegular: isRegular)
+        navigation.open(store.create().id)
     }
 
     private func pasteAsNewScript() {
@@ -337,14 +419,14 @@ struct LibraryView: View {
             return
         }
         // With the split view the new script opens next to the list. On a phone it just joins the list, as before.
-        if isRegular { navigation.open(script.id, isRegular: true) }
+        if splits { navigation.open(script.id) }
     }
 
     private func handleImport(_ result: Result<[URL], any Error>) {
         switch result {
         case .success(let urls):
             let summary = store.importFiles(at: urls)
-            if isRegular, let first = summary.imported.first { navigation.open(first.id, isRegular: true) }
+            if splits, let first = summary.imported.first { navigation.open(first.id) }
             guard !summary.failures.isEmpty else { return }
             notice = Notice(
                 title: summary.failures.count == 1 ? "Couldn't import a file" : "Couldn't import some files",
@@ -365,7 +447,7 @@ struct LibraryView: View {
 
     private func delete(_ script: Script) {
         guard let removed = store.delete(script.id) else { return }
-        // Deleting the open script (regular width) clears the detail; Undo brings it back.
+        // Deleting the open script (split view) clears the detail; Undo brings it back.
         deletedWasOpen = navigation.removed(script.id)
         showDeleteBanner(for: removed)
     }
@@ -404,11 +486,49 @@ struct LibraryView: View {
         case .openSettings: settingsSheet = .settings
         case .openSyncSettings: settingsSheet = .sync
         case .openMacRemote: settingsSheet = .macRemote
-        case .openEditor(let id): navigation.open(id, isRegular: isRegular)
+        case .openEditor(let id): navigation.open(id)
         case .openPrompter(let id, let autoStart): prompterTarget = PrompterTarget(id: id, autoStart: autoStart)
         case .openPrompterSettings(let id): prompterTarget = PrompterTarget(id: id, opensSettings: true)
         }
     }
+
+    /// Debug builds with `-duoProbe`: a line in the probe's log (layout switches and the editor's keyboard during a fold).
+    private func debugNote(_ text: @autoclosure () -> String) {
+        LibraryDebugLog.note(text())
+    }
+
+    /// Debug builds: `-demoData -demoPairedMac` pairs the throwaway library with a made-up Mac (see `LaunchOptions`).
+    private func applyDemoPairing() {
+        #if DEBUG
+        guard Self.debugOptions.demoPairedMac, syncClient.isDemo, syncClient.pairedMac == nil else { return }
+        syncClient.pairing.add(
+            PairedDevice(
+                deviceID: "demo-mac", name: DemoData.macName, platform: .mac, key: Data(count: 32),
+                pairedAt: .now, lastSyncedAt: .now
+            ),
+            replacingAll: true
+        )
+        #endif
+    }
+
+    /// Debug builds: `-interfaceOrientation landscapeLeft` turns the window (see `LaunchOptions`).
+    private func applyDebugOrientation() {
+        #if DEBUG
+        guard let orientation = Self.debugOptions.interfaceOrientation,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+        else { return }
+        let mask: UIInterfaceOrientationMask = switch orientation {
+        case .portrait: .portrait
+        case .landscapeLeft: .landscapeLeft
+        case .landscapeRight: .landscapeRight
+        }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+        #endif
+    }
+
+    #if DEBUG
+    private static let debugOptions = LaunchOptions()
+    #endif
 
     /// Dismissing a store error clears it in the store, so it isn't shown again and the next failure is reported.
     private var noticeIsPresented: Binding<Bool> {
@@ -494,4 +614,19 @@ private struct DeleteBanner: View {
         .padding(.bottom, 8)
         .accessibilityElement(children: .contain)
     }
+}
+
+/// Debug builds with `-duoProbe`: lines in the probe's log about the library's layout switches and the editor's keyboard
+/// handoff. Does nothing otherwise.
+enum LibraryDebugLog {
+    @MainActor
+    static func note(_ text: @autoclosure () -> String) {
+        #if DEBUG
+        if isOn { DuoProbe.log(text()) }
+        #endif
+    }
+
+    #if DEBUG
+    private static let isOn = LaunchOptions().duoProbe
+    #endif
 }

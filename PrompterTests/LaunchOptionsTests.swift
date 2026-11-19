@@ -142,6 +142,25 @@ struct LaunchOptionsAutoStartTests {
         #expect(!LaunchOptions(arguments: ["-noWatchPush", "NO"]).noWatchPush)
     }
 
+    /// Screenshots: the demo library paired with a made-up Mac, for the screens that show only while a Mac is paired.
+    @Test func demoPairedMacFlag() {
+        #expect(!LaunchOptions(arguments: []).demoPairedMac)
+        #expect(!LaunchOptions(arguments: ["-demoData", "-route", "syncSettings"]).demoPairedMac)
+        let options = LaunchOptions(arguments: ["-demoData", "-demoPairedMac", "-route", "syncSettings"])
+        #expect(options.demoPairedMac)
+        #expect(options.demoData)
+        #expect(options.route == .syncSettings)
+    }
+
+    /// Screenshots of the iPhone Duo's cover held wide without the simulator's rotate control.
+    @Test func interfaceOrientationOption() {
+        #expect(LaunchOptions(arguments: []).interfaceOrientation == nil)
+        #expect(LaunchOptions(arguments: ["-interfaceOrientation", "landscapeLeft"]).interfaceOrientation == .landscapeLeft)
+        #expect(LaunchOptions(arguments: ["-interfaceOrientation", "LANDSCAPERIGHT"]).interfaceOrientation == .landscapeRight)
+        #expect(LaunchOptions(arguments: ["-interfaceOrientation", "portrait"]).interfaceOrientation == .portrait)
+        #expect(LaunchOptions(arguments: ["-interfaceOrientation", "none"]).interfaceOrientation == nil)
+    }
+
     @Test func prompterSettingsRouteIsCaseInsensitive() {
         #expect(LaunchOptions(arguments: ["-route", "prompterSettings"]).route == .prompterSettings)
         #expect(LaunchOptions(arguments: ["-route", "promptersettings"]).route == .prompterSettings)

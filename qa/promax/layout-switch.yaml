@@ -1,0 +1,103 @@
+# The library switching layout with a script open, on an iPhone Pro Max simulator: portrait is the navigation stack and
+# landscape (regular width) the split view, the same switch the iPhone Duo makes when it folds or unfolds. Maestro can't
+# fold the Duo or turn it, so this is how the switch is checked. Run it by name on a Pro Max:
+#   SIM_UDID=<UDID of an iPhone Pro Max simulator> scripts/qa.sh promax/layout-switch
+# It sits in a subfolder so the default runs (qa/*.yaml) never pick it up: a 6.3 inch iPhone stays compact width in
+# landscape, so nothing would switch there.
+appId: ${APP_ID}
+name: Layout switch
+---
+- setOrientation: PORTRAIT
+- launchApp:
+    clearState: true
+    arguments:
+      -demoData: "true"
+      -route: library
+- extendedWaitUntil:
+    visible: 'Channel intro: rig tour'
+    timeout: 20000
+
+# 1. A blank new script survives the switch both ways (it used to be dropped as abandoned), and the keyboard comes back
+# in it, so typing goes on.
+- tapOn: 'Add script'
+- tapOn: 'New script'
+- extendedWaitUntil:
+    visible: 'Start typing your script…'
+    timeout: 5000
+- waitForAnimationToEnd
+- setOrientation: LANDSCAPE_LEFT
+- waitForAnimationToEnd
+- assertVisible: 'Start typing your script…'
+- assertVisible: 'Channel intro: rig tour'   # the list beside the editor
+- takeScreenshot: switch-1-split-new-script
+- inputText: 'Kept across'
+- assertVisible: '.*Kept across.*'
+- setOrientation: PORTRAIT
+- waitForAnimationToEnd
+- inputText: ' the turn'
+- assertVisible: '.*Kept across the turn.*'
+- takeScreenshot: switch-2-stack-typed
+
+# 2. The second time in the split view the list is back beside the editor (it stayed hidden after one round trip).
+- tapOn: 'Done'
+- setOrientation: LANDSCAPE_LEFT
+- waitForAnimationToEnd
+- assertVisible: 'Channel intro: rig tour'
+- assertVisible: '.*Kept across the turn.*'
+- takeScreenshot: switch-3-split-again
+
+# 3. The rename alert stays up across a switch.
+- longPressOn: 'Channel intro: rig tour'
+- tapOn: 'Rename'
+- extendedWaitUntil:
+    visible: 'Rename script'
+    timeout: 5000
+- setOrientation: PORTRAIT
+- waitForAnimationToEnd
+- assertVisible: 'Rename script'
+- takeScreenshot: switch-4-rename-kept
+- tapOn: 'Cancel'
+
+# 4. Back on the list the typed script is there (as "Untitled": it has no title), and no blank one was left behind.
+- tapOn: 'Scripts'
+- extendedWaitUntil:
+    visible: 'Client testimonial ask'
+    timeout: 5000
+- assertVisible: '.*Kept across the turn.*'
+- assertNotVisible: '0 words .*'
+
+# 5. The delete banner and its Undo stay across a switch.
+- swipe:
+    from:
+      text: 'Client testimonial ask'
+    direction: LEFT
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    visible: 'Deleted .*'
+    timeout: 5000
+- setOrientation: LANDSCAPE_LEFT
+- waitForAnimationToEnd
+- assertVisible: 'Deleted .*'
+- takeScreenshot: switch-5-banner-kept
+- tapOn: 'Undo'
+- extendedWaitUntil:
+    visible: 'Client testimonial ask'
+    timeout: 5000
+
+# 6. Typing in the middle of a script: after each switch the next words land right after the last ones, not at the end
+# of the script.
+- tapOn: 'Channel intro: rig tour'
+- waitForAnimationToEnd
+- tapOn: 'Script text'
+- inputText: ' MIDONE'
+- setOrientation: PORTRAIT
+- waitForAnimationToEnd
+- inputText: ' MIDTWO'
+- assertVisible: '(?s).*MIDONE MIDTWO.*'
+- takeScreenshot: switch-6-stack-cursor-kept
+- setOrientation: LANDSCAPE_LEFT
+- waitForAnimationToEnd
+- inputText: ' MIDTHREE'
+- assertVisible: '(?s).*MIDONE MIDTWO MIDTHREE.*'
+- takeScreenshot: switch-7-split-cursor-kept
+- setOrientation: PORTRAIT

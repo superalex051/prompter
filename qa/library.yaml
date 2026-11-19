@@ -50,6 +50,22 @@ name: Library
 - assertVisible: 'Channel intro: rig tour'
 - takeScreenshot: library-after-new-script
 
+# The same with a swipe back from the screen's left edge, which can end in a different order than the back button.
+- tapOn: 'Add script'
+- tapOn: 'New script'
+- extendedWaitUntil:
+    visible: 'Start typing your script…'
+    timeout: 5000
+- waitForAnimationToEnd
+- swipe:
+    start: 1%, 45%
+    end: 90%, 45%
+    duration: 700
+- extendedWaitUntil:
+    visible: 'Prompt Welcome to Prompter'
+    timeout: 10000
+- assertNotVisible: 'Untitled'
+
 # Swipe to delete, then Undo. The banner stays for six seconds, so the screenshot and the Undo tap come straight after.
 - swipe:
     from:
