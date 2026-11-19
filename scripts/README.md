@@ -52,4 +52,14 @@ scripts/heavy.sh --task DUO-SHOTS -- scripts/duo-shots.sh .inbox/duo/shots/run1
 POSTURES="closed open" ROUTES="library prompter" SKIP_BUILD=1 scripts/heavy.sh --task DUO-SHOTS -- scripts/duo-shots.sh /tmp/x
 ```
 
+- `-duoProbe` is a launch option of Debug builds (a Release build ignores it). The app then logs its window every time it
+  changes (size, safe area, size classes, scene orientation, the fold, regions covering the screen, the hinge, scene phase, the
+  prompter's relayouts and orientation lock) to `Documents/duo-probe.log` and the console. `lib.sh` and `duo-shots.sh` read it to
+  know which posture they are really in. Find the log with `xcrun simctl get_app_container <udid> <bundle id> data`.
+
 Both need Device Hub running and Accessibility permission for the terminal. Never quit Device Hub; other sessions share it.
+
+**Limit: they cannot run while the Mac's screen is locked.** Accessibility sees no window on a locked screen, so
+`scripts/duo-posture.sh` fails and so do `DUO_POSTURE` and the posture steps of `duo-shots.sh` (the Duo simulator boots folded,
+on the cover screen). Without a posture the cover can still be tested. Do not work around the lock screen: unlock the Mac by
+hand and keep it awake for the run (`caffeinate -d`).

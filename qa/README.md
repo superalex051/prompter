@@ -74,6 +74,13 @@ the simulator is turned. Without `DUO_POSTURE` the Duo is used in the posture it
   settings popover is not in Maestro's hierarchy, so Done and close are points.
 - **Needs Device Hub.** `DUO_POSTURE` and `duo-shots.sh` need Device Hub open with a window and Accessibility permission. If it
   has no window (it can lose it), they stop with "Device Hub would not show the Duo"; open its window by hand.
+- **Not while the Mac's screen is locked.** Accessibility sees no window on a locked screen, so the posture buttons cannot be
+  pressed and `DUO_POSTURE` fails. The Duo simulator boots folded, so without `DUO_POSTURE` the flows run on the cover only
+  (a 466 pt window: the phone flows). Open, open tall and Book can only be run with the Mac unlocked and awake
+  (`caffeinate -d`). `DUO_POSTURE` also needs the Debug build, because it measures the window with `-duoProbe`.
+- **Cover results today.** `prompter` and `voice` pass. `editor`, `library` and `settings` stop at known steps (the editor's
+  tap at 50%,88% lands on the footer, the cover's back button is a bare chevron so `tapOn: 'Scripts'` finds nothing, and
+  "Weight" scrolls out of view). They are limits of the flows, not app bugs.
 
 ## Where the screenshots land
 
