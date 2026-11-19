@@ -46,7 +46,7 @@ enum PrompterAvoidance {
         // Settle on a spot that clears every block: step past whatever is in the way, in each direction.
         func settle(_ direction: CGFloat) -> CGFloat? {
             var shift: CGFloat = 0
-            for _ in 0...blocks.count {
+            for _ in 0...(blocks.count + 1) {
                 let moved = word.offsetBy(dx: shift, dy: 0)
                 guard let hit = blocks.first(where: { overlaps($0, moved.insetBy(dx: -gap, dy: 0)) }) else {
                     return row.contains(moved) ? shift : nil
@@ -70,7 +70,7 @@ enum PrompterAvoidance {
         let bounds = CGRect(origin: .zero, size: screen)
         func settle(down: Bool) -> CGSize? {
             var offset = CGSize.zero
-            for _ in 0...blocks.count {
+            for _ in 0...(blocks.count + 1) {
                 let moved = button.offsetBy(dx: offset.width, dy: offset.height)
                 guard let hit = blocks.first(where: { overlaps($0, moved) }) else {
                     return bounds.contains(moved) ? offset : nil
@@ -84,9 +84,10 @@ enum PrompterAvoidance {
     }
 
     /// The two share some area (only touching at an edge doesn't count: a piece moved a gap clear of a block touches the
-    /// block's margin-widened rect exactly).
+    /// block's margin-widened rect exactly, give or take rounding, hence the thousandth of a point).
     static func overlaps(_ a: CGRect, _ b: CGRect) -> Bool {
-        a.minX < b.maxX && b.minX < a.maxX && a.minY < b.maxY && b.minY < a.maxY
+        let e: CGFloat = 0.001
+        return a.minX < b.maxX - e && b.minX < a.maxX - e && a.minY < b.maxY - e && b.minY < a.maxY - e
     }
 
     /// How far towards the screen's trailing edge (then its top) a canvas rect lands, for breaking ties.
