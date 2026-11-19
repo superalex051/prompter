@@ -455,9 +455,7 @@ struct LibraryView: View {
 
     /// Debug builds with `-duoProbe`: a line in the probe's log (layout switches and the editor's keyboard during a fold).
     private func debugNote(_ text: @autoclosure () -> String) {
-        #if DEBUG
-        if Self.debugOptions.duoProbe { DuoProbe.log(text()) }
-        #endif
+        LibraryDebugLog.note(text())
     }
 
     /// Debug builds: `-demoData -demoPairedMac` pairs the throwaway library with a made-up Mac (see `LaunchOptions`).
@@ -577,4 +575,19 @@ private struct DeleteBanner: View {
         .padding(.bottom, 8)
         .accessibilityElement(children: .contain)
     }
+}
+
+/// Debug builds with `-duoProbe`: lines in the probe's log about the library's layout switches and the editor's keyboard
+/// handoff. Does nothing otherwise.
+enum LibraryDebugLog {
+    @MainActor
+    static func note(_ text: @autoclosure () -> String) {
+        #if DEBUG
+        if isOn { DuoProbe.log(text()) }
+        #endif
+    }
+
+    #if DEBUG
+    private static let isOn = LaunchOptions().duoProbe
+    #endif
 }

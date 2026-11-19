@@ -182,6 +182,7 @@ private struct EditorContent: View {
         .onChange(of: focus) { old, new in
             if old == .title { adoptStoredTitle() }
             keyboard?.state.focusChanged(to: new, in: scriptID)
+            LibraryDebugLog.note("editor focus \(String(describing: new))")
         }
         .onChange(of: bodyText) { _, newValue in
             store.update(scriptID, body: newValue)
@@ -213,14 +214,19 @@ private struct EditorContent: View {
             // A brand-new script opens ready to type, and an editor rebuilt by a layout switch (the iPhone Duo folding or
             // unfolding) types where the old one did. The short pause lets the push animation settle, because focus set
             // during the transition is often dropped; it also gives the library time to leave the handoff.
+            // An editor that is already gone (rebuilt again during the switch) leaves the handoff to its replacement.
             if opensBlank, !didAutofocus {
                 didAutofocus = true
                 try? await Task.sleep(for: .milliseconds(450))
-                focus = keyboard?.state.take(for: scriptID).map(\.field) ?? .body
+                let handoff = Task.isCancelled ? nil : keyboard?.state.take(for: scriptID)
+                LibraryDebugLog.note("editor opened blank, handoff \(String(describing: handoff?.field))")
+                focus = handoff.map(\.field) ?? .body
             } else if let keyboard {
                 // An existing script changes nothing here unless a layout switch left it the keyboard.
                 try? await Task.sleep(for: .milliseconds(450))
-                if let handoff = keyboard.state.take(for: scriptID) { focus = handoff.field }
+                guard !Task.isCancelled, let handoff = keyboard.state.take(for: scriptID) else { return }
+                LibraryDebugLog.note("editor takes the keyboard handoff: \(String(describing: handoff.field))")
+                focus = handoff.field
             }
         }
     }
