@@ -15,6 +15,12 @@ struct LibraryLayoutTests {
         #expect(LibraryLayout.choose(isRegularWidth: true, windowWidth: 951, isPad: false) == .split)
     }
 
+    /// scripts/qa.sh picks the Duo's flows with the same number (`DUO_SPLIT_MIN_WIDTH`, default 700): the ipad-* split-view
+    /// flows for a window at least that wide. Change both together, or qa.sh sends those flows to a window showing the stack.
+    @Test func theSplitWidthIsTheOneQaShUses() {
+        #expect(LibraryLayout.minimumSplitWidth == 700)
+    }
+
     /// The finding: open and tall (669 x 951, regular width) the split view hid the list behind a sidebar button and showed
     /// only "Pick a script or make a new one".
     @Test func theOpenDuoHeldTallGetsTheStackWithTheListShowing() {

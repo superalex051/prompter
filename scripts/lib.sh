@@ -211,7 +211,8 @@ duo_probe() {
 # duo_apply_posture <udid> <bundle id> <Closed|Open|OpenTall|ClosedLandscape|Book>: put the Duo in that posture and
 # check it by measuring the window, because "Rotate Right" is cumulative and Device Hub does not say which way the
 # simulator is turned. Closed = 466x678, ClosedLandscape = 678x466, Open = 951x669, OpenTall = 669x951 (Open, then a turn).
-# Book only presses the button (the window is whatever the app makes of it). Returns 1 when the window never matched.
+# Book = the Book button with the window wide like Open (951x669, the fold upright down the middle); the same button with the
+# window tall is a fold across the screen (tabletop), which is not Book. Returns 1 when the window never matched.
 duo_apply_posture() {
   local udid="$1" app_id="$2" want="$3" base shape probe w h tries=0
   case "$want" in
@@ -228,14 +229,13 @@ duo_apply_posture() {
     sleep 5
   done
   [ "$(scripts/duo-posture.sh state)" = "$base" ] || { scripts/duo-posture.sh "$base" >/dev/null || return 1; sleep 5; }
-  [ "$want" = Book ] && return 0
   while :; do
     probe="$(duo_probe "$udid" "$app_id" -route library)"
     read -r w h _ <<<"$probe"
     case "$want" in
       Closed)          [ -n "$w" ] && [ "$w" -lt 600 ] && [ "$w" -lt "$h" ] && return 0 ;;
       ClosedLandscape) [ -n "$w" ] && [ "$w" -lt 800 ] && [ "$w" -gt "$h" ] && return 0 ;;
-      Open)            [ -n "$w" ] && [ "$w" -gt 800 ] && [ "$w" -gt "$h" ] && return 0 ;;
+      Open|Book)       [ -n "$w" ] && [ "$w" -gt 800 ] && [ "$w" -gt "$h" ] && return 0 ;;
       OpenTall)        [ -n "$w" ] && [ "$w" -gt 600 ] && [ "$w" -lt "$h" ] && return 0 ;;
     esac
     tries=$((tries + 1))

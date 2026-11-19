@@ -39,10 +39,11 @@ has no verb to fold it. These scripts work around that:
   window instead of trusting a count.
 - `lib.sh` has the helpers `sim_is_duo`, `duo_probe` (launches the app with `-duoProbe` and returns the window it logged:
   width, height, horizontal size class, safe area left and top) and `duo_apply_posture` (presses buttons until the
-  measured window matches Closed 466x678, ClosedLandscape 678x466, Open 951x669 or OpenTall 669x951).
+  measured window matches Closed 466x678, ClosedLandscape 678x466, Open 951x669, OpenTall 669x951 or Book, which is the
+  Book button with Open's wide window).
 - `scripts/qa.sh` takes `DUO_POSTURE=Closed|Open|OpenTall` and picks the flows from the measured window (see `qa/README.md`).
 - `scripts/duo-shots.sh <folder>` is the contact-sheet run: one build, then every posture (closed, closed-landscape, open,
-  open-tall, book) times every route (library, editor, prompter playing, prompterSettings, settings, syncSettings,
+  book, open-tall) times every route (library, editor, prompter playing, prompterSettings, settings, syncSettings,
   macRemote), each saved from both displays as `<posture>-<route>-<display>.png` (display is `cover` or `open`), plus a
   `manifest.txt` with the window the app reported for each shot.
 

@@ -10,14 +10,15 @@
 # window the app reported (size, size classes) at that moment, and any shot that failed.
 #
 # Postures (in this order): closed (cover, portrait 466x678), closed-landscape (cover turned: 678x466), open (951x669),
-# open-tall (open turned: 669x951), book (half open; whatever the app makes of it). The posture is set with
-# scripts/duo-posture.sh and the window is measured with the app's -duoProbe log, so a run that could not reach a
-# posture says so in the manifest instead of quietly shooting the wrong one.
+# book (half open, held wide like open: the fold runs top to bottom), open-tall (open turned: 669x951). Book comes before
+# open-tall because a turn stays: pressed after open-tall it would fold across a tall window (tabletop). The posture is set
+# with scripts/duo-posture.sh and the window is measured with the app's -duoProbe log (book too), so a run that could not
+# reach a posture says so in the manifest instead of quietly shooting the wrong one.
 # Routes: library, editor, prompter (playing: the countdown has run), prompterSettings, settings, syncSettings, macRemote.
 #
 # Environment:
 #   SIM_UDID / SIM   the Duo (default: the simulator named "Prompter Dev Duo", found by exact name)
-#   POSTURES         space separated subset, default "closed closed-landscape open open-tall book"
+#   POSTURES         space separated subset, default "closed closed-landscape open book open-tall"
 #   ROUTES           space separated subset, default as above
 #   SKIP_BUILD=1     reuse the last scripts/build.sh output
 #   DISPLAYS         "1 3" by default: 1 is the cover display, 3 the open one (`xcrun simctl io <udid> enumerate`)
@@ -32,7 +33,7 @@ cd "$(dirname "$0")/.."
 
 OUT="${1:?usage: scripts/duo-shots.sh <output folder>}"
 SIM="${SIM:-Prompter Dev Duo}"
-POSTURES="${POSTURES:-closed closed-landscape open open-tall book}"
+POSTURES="${POSTURES:-closed closed-landscape open book open-tall}"
 ROUTES="${ROUTES:-library editor prompter prompterSettings settings syncSettings macRemote}"
 DISPLAYS="${DISPLAYS:-1 3}"
 APP="$IOS_APP_DEFAULT"
@@ -110,7 +111,7 @@ for p in $POSTURES; do
     open)             shoot_posture open Open ;;
     open-tall)        shoot_posture open-tall OpenTall ;;
     book)             shoot_posture book Book ;;
-    *) echo "unknown posture $p (closed closed-landscape open open-tall book)" >&2; exit 2 ;;
+    *) echo "unknown posture $p (closed closed-landscape open book open-tall)" >&2; exit 2 ;;
   esac
 done
 echo "Done: $(find "$OUT" -name '*.png' | wc -l | tr -d ' ') screenshots in $OUT, manifest in $MANIFEST"

@@ -3,9 +3,10 @@
 # The prompter locks the app to landscape on a portrait-sized simulator. After that, Maestro reports every element's bounds
 # in LANDSCAPE points (the screen is 874 x 402) but sends taps in PORTRAIT points (402 x 874), so `tapOn: {id: ...}` and
 # `tapOn: 'Done'` land in the wrong place. Every tap below that is not the exact middle of the screen is therefore a point
-# worked out from the window (scripts/qa.sh measures it and passes TAP_DONE, TAP_CLOSE and TURNS; the numbers
-# in the comments are the iPhone 17 Pro ones, which are also qa.sh's defaults off the Duo): landscape (x, y) is portrait (402 - y, x), i.e. `point: "<402-y>, <x>"` (iPhone 17 Pro). The middle
-# of the screen is the same point both ways, so `50%,50%` is fine. Swipes use the same rule. See qa/README.md ("Landscape").
+# worked out from the window: landscape (x, y) is portrait (402 - y, x), i.e. `point: "<402-y>, <x>"` (iPhone 17 Pro). The
+# middle of the screen is the same point both ways, so `50%,50%` is fine. Swipes use the same rule. See qa/README.md
+# ("Landscape"). On the iPhone Duo scripts/qa.sh measures the window and passes TAP_DONE, TAP_CLOSE and TURNS; a run without
+# them (any iPhone, or by hand with only APP_ID) gets the iPhone 17 Pro points in the comments below.
 # Screenshots from inside the prompter come out rotated a quarter turn for the same reason (README says how to turn them).
 appId: ${APP_ID}
 name: Prompter
@@ -79,19 +80,21 @@ name: Prompter
 - copyTextFrom:
     id: prompter.hud
 - evalScript: ${output.hudBeforeDrag = maestro.copiedText}
-# (Percentages, because a swipe's points cannot hold a variable. TURNS=1: the window was turned, so landscape "up" is portrait
-# "right": 13%,50% to 75%,50% (the iPhone's 52,437 to 302,437). TURNS=0: a plain landscape window, up is up.)
+# TURNS=1 (the iPhone, and the Duo's cover): the window was turned, so landscape "up" is portrait "right", the points above.
+# They also fit the cover (466 x 678 portrait). Not percentages: Maestro reads those against its 874 x 402 landscape frame,
+# so '13%,50%' to '75%,50%' was (113, 201) to (655, 201), past the right edge of the 402 pt wide display.
+# TURNS=0 (a plain landscape window, the open Duo, never run yet): up is up.
 - runFlow:
     when:
-      true: ${TURNS == '1'}
+      true: ${typeof TURNS === 'undefined' || TURNS == '1'}
     commands:
       - swipe:
-          start: '13%,50%'
-          end: '75%,50%'
+          start: '52,437'
+          end: '302,437'
           duration: 200
 - runFlow:
     when:
-      true: ${TURNS != '1'}
+      true: ${typeof TURNS !== 'undefined' && TURNS != '1'}
     commands:
       - swipe:
           start: '50%,87%'
@@ -121,7 +124,7 @@ name: Prompter
 - waitForAnimationToEnd
 - takeScreenshot: prompter-settings
 - tapOn:
-    point: '${TAP_DONE}'
+    point: '${typeof TAP_DONE === "undefined" ? "336,759" : TAP_DONE}'
 - extendedWaitUntil:
     visible:
       id: prompter.hud
@@ -133,7 +136,7 @@ name: Prompter
 # Close (the x at the top left in landscape, centre landscape (96, 34) -> portrait point (368, 96)). The library comes
 # back and the app turns portrait again.
 - tapOn:
-    point: '${TAP_CLOSE}'
+    point: '${typeof TAP_CLOSE === "undefined" ? "368,96" : TAP_CLOSE}'
 # Back in portrait, but Maestro keeps treating the screen as the 874 x 402 landscape one for the rest of the flow: nothing
 # below y=402 is ever reported as visible, not even after 30 s (a fresh `maestro hierarchy` sees everything). So only the top two
 # rows and the title are asserted; the screenshot shows all four.

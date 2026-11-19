@@ -147,6 +147,8 @@ elif [ "$IS_DUO" = "1" ]; then
   FLOW_ENV+=(-e "WIN_W=$WIN_W" -e "WIN_H=$WIN_H" -e "PRO_W=${PRO_W:-$WIN_W}" -e "PRO_H=${PRO_H:-$WIN_H}"
              -e "PRO_SAFE_L=${PRO_SAFE_L:-0}" -e "PRO_SAFE_T=${PRO_SAFE_T:-0}")
   if [ "$DEFAULT_RUN" = "1" ]; then
+    # 700 must match LibraryLayout.minimumSplitWidth (Prompter/Features/Library/LibraryLayout.swift): narrower phone windows
+    # get the stack, where the ipad-* split-view flows fail. LibraryLayoutTests pins that number to this one.
     if [ "$WIN_W" -ge "${DUO_SPLIT_MIN_WIDTH:-700}" ]; then select_flows 1; else select_flows 0; fi
   fi
 fi
@@ -154,7 +156,8 @@ fi
 # The prompter is landscape. Maestro reports its elements in landscape points but sends taps in the display's own portrait
 # points when the window was turned (README, "Landscape"), so a landscape point (x, y) is tapped at "<H - y>,<x>" (H = the
 # landscape window's height) when TURNS=1 and at "x,y" when TURNS=0. Off the Duo the numbers are the iPhone 17 Pro's (874 x 402),
-# which gives the points the flows always had: Done 336,759, close 368,96, swipe in percentages (see qa/prompter.yaml).
+# the points the flows always had: Done 336,759, close 368,96 (the flows fall back to the same ones when run by hand), and the
+# drag in qa/prompter.yaml is its own fixed points whenever TURNS=1.
 land_to_tap() { if [ "${TURNS:-1}" = 1 ]; then echo "$((${PRO_H:-402} - $2)),$1"; else echo "$1,$2"; fi; }
 if [ "$IS_DUO" = "1" ] && [ -n "${WIN_W:-}" ]; then
   # The settings popover is anchored to the window's right edge. Done was measured on the cover screen (678 x 466 prompter

@@ -19,6 +19,7 @@ enum LibraryLayout: Equatable, Sendable {
     case split
 
     /// The narrowest phone window that gets two columns: the sidebar's 340 pt minimum plus room for the editor.
+    /// scripts/qa.sh uses the same number to pick the Duo's flows (`DUO_SPLIT_MIN_WIDTH`); change both together.
     static let minimumSplitWidth: CGFloat = 700
 
     /// `windowWidth`: the window's full width in points, or nil before the first layout pass (then the size class

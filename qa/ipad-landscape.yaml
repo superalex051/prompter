@@ -6,8 +6,8 @@
 appId: ${APP_ID}
 name: iPad landscape
 # DUO is 1 when scripts/qa.sh runs this on the iPhone Duo (open): the posture is set by qa.sh, so the flow looks at the
-# window as it is and does not turn the simulator. qa.sh always passes -e DUO (a value in an env: header here would win
-# over it), so run this flow through scripts/qa.sh.
+# window as it is and does not turn the simulator. On the Duo run it through scripts/qa.sh (a value in an env: header here
+# would win over -e); without DUO (an iPad, by hand) it turns the simulator as it always did.
 ---
 - launchApp:
     clearState: true
@@ -19,7 +19,7 @@ name: iPad landscape
     timeout: 20000
 - runFlow:
     when:
-      true: ${DUO != '1'}
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
     commands:
       - setOrientation: LANDSCAPE_LEFT
 - waitForAnimationToEnd
@@ -72,7 +72,7 @@ name: iPad landscape
 
 - runFlow:
     when:
-      true: ${DUO != '1'}
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
     commands:
       - setOrientation: PORTRAIT
 - waitForAnimationToEnd

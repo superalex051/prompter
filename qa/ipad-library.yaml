@@ -4,8 +4,8 @@
 appId: ${APP_ID}
 name: iPad library
 # DUO is 1 when scripts/qa.sh runs this on the iPhone Duo with its screen open (a regular-width window like an iPad). The Duo's
-# posture is set by qa.sh (DUO_POSTURE), so the flow must not turn the simulator itself. qa.sh always passes -e DUO (a
-# value in an env: header here would win over it), so run this flow through scripts/qa.sh.
+# posture is set by qa.sh (DUO_POSTURE), so the flow must not turn the simulator itself. On the Duo run it through
+# scripts/qa.sh (a value in an env: header here would win over -e); without DUO (an iPad, by hand) it sets portrait as before.
 ---
 - launchApp:
     clearState: true
@@ -19,7 +19,7 @@ name: iPad library
 # it in, so it is set explicitly rather than assumed.
 - runFlow:
     when:
-      true: ${DUO != '1'}
+      true: ${typeof DUO === 'undefined' || DUO != '1'}
     commands:
       - setOrientation: PORTRAIT
 - waitForAnimationToEnd
