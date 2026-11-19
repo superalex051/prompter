@@ -258,3 +258,127 @@ struct PrompterTextViewFoldTests {
         #expect(drawn.characterIndex == engine.layout.characterIndex(at: engine.position))
     }
 }
+
+/// New text laid out while the text view was still scrolled deep into the old one: TextKit 2 drew a block of paragraphs
+/// hundreds of points away from where the whole-document layout (the engine's) had them, so the take read through the
+/// wrong text. These replay the iPhone Duo walk that showed it (cover 466 × 678, open 951 × 669 or 669 × 951) and an
+/// iPhone take, scrolling on in small steps like the display link, and check every line TextKit has against the engine's.
+@MainActor
+struct PrompterTextViewDeepRelayoutTests {
+    private func makeView(body: String, foldable: Bool) throws -> (PrompterController, PrompterTextView, UITextView) {
+        let controller = PrompterController(scriptTitle: "Test", body: body, settings: PrompterSettings())
+        let view = PrompterTextView(engine: controller.engine)
+        view.anchorsReadingPoint = foldable
+        view.update(document: controller.document, settings: PrompterSettings())
+        let textView = try #require(view.subviews.compactMap { $0 as? UITextView }.first)
+        return (controller, view, textView)
+    }
+
+    private func layOut(_ view: PrompterTextView, _ width: Double, _ height: Double) {
+        view.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        view.layoutIfNeeded()
+    }
+
+    /// The engine lines whose top in TextKit's current layout is more than a point from the engine's (or not laid out).
+    private func misplacedLines(_ engine: ScrollEngine, _ textView: UITextView) throws -> [Int] {
+        let manager = try #require(textView.textLayoutManager)
+        let content = try #require(manager.textContentManager)
+        let start = manager.documentRange.location
+        var tops: [Int: Double] = [:]
+        manager.enumerateTextLayoutFragments(from: start, options: []) { fragment in
+            let offset = content.offset(from: start, to: fragment.rangeInElement.location)
+            for line in fragment.textLineFragments {
+                tops[offset + line.characterRange.location] = fragment.layoutFragmentFrame.minY + line.typographicBounds.minY
+            }
+            return true
+        }
+        return engine.layout.lines.indices.filter { index in
+            let line = engine.layout.lines[index]
+            return tops[line.characterIndex].map { abs($0 - line.y) > 1 } ?? true
+        }
+    }
+
+    /// Scrolls on to `position` in 20 pt steps, showing each step the way the display link does, and expects the line
+    /// TextKit has at the reading line to be the engine's (one line either side: a paragraph gap belongs to the line above
+    /// in the engine and to the next paragraph in TextKit).
+    private func play(_ engine: ScrollEngine, _ textView: UITextView, to position: Double) throws {
+        while engine.position < min(position, engine.maxPosition - 20) {
+            engine.scrub(by: 20)
+            textView.contentOffset = CGPoint(x: 0, y: (engine.position * 3).rounded() / 3)
+            textView.layoutIfNeeded()
+            guard let drawnLine = drawnLine(engine, textView) else { continue }
+            let ownLine = try #require(engine.layout.lineIndex(at: engine.position))
+            #expect(abs(drawnLine - ownLine) <= 1, "at \(Int(engine.position)): TextKit draws line \(drawnLine), the engine is on \(ownLine)")
+            if abs(drawnLine - ownLine) > 1 { return }
+        }
+        let misplaced = try misplacedLines(engine, textView)
+        #expect(misplaced.isEmpty, "lines \(misplaced) out of place at \(Int(engine.position))")
+    }
+
+    /// Every line where the engine has it, right after a relayout.
+    private func expectInPlace(_ engine: ScrollEngine, _ textView: UITextView, sourceLocation: SourceLocation = #_sourceLocation) throws {
+        let misplaced = try misplacedLines(engine, textView)
+        #expect(misplaced.isEmpty, "lines \(misplaced) out of place after the relayout", sourceLocation: sourceLocation)
+    }
+
+    /// The engine's index of the line TextKit has at the reading line; nil in a gap between paragraphs.
+    private func drawnLine(_ engine: ScrollEngine, _ textView: UITextView) -> Int? {
+        let y = textView.contentOffset.y + 0.5
+        guard let manager = textView.textLayoutManager, let content = manager.textContentManager,
+              let fragment = manager.textLayoutFragment(for: CGPoint(x: 1, y: y)),
+              let line = fragment.textLineFragments.last(where: { fragment.layoutFragmentFrame.minY + $0.typographicBounds.minY <= y })
+        else { return nil }
+        let character = content.offset(from: manager.documentRange.location, to: fragment.rangeInElement.location)
+            + line.characterRange.location
+        return engine.layout.lines.lastIndex { $0.characterIndex <= character }
+    }
+
+    struct Walk: Sendable, CustomTestStringConvertible {
+        let foldBackAt: Double
+        let bookAt: Double
+        let tall: Bool
+        var testDescription: String { "fold back at \(Int(foldBackAt)), Book at \(Int(bookAt)) \(tall ? "tall" : "wide")" }
+    }
+
+    /// Each of these drew a paragraph or more out of place before the fix (the first is the Book step of the iPhone Duo
+    /// walk with Landscape only off, 5 lines ahead; the second its fold back to the cover, 10 lines ahead).
+    @Test(arguments: [
+        Walk(foldBackAt: 2530, bookAt: 6685, tall: false),
+        Walk(foldBackAt: 2972, bookAt: 6685, tall: false),
+        Walk(foldBackAt: 2530, bookAt: 6685, tall: true),
+        Walk(foldBackAt: 2530, bookAt: 7400, tall: true),
+    ])
+    func aFoldDeepInATakeDrawsEveryLineWhereTheEngineHasIt(walk: Walk) throws {
+        let (controller, view, textView) = try makeView(body: SampleScript.body, foldable: true)
+        let engine = controller.engine
+        layOut(view, 466, 678)
+        try play(engine, textView, to: 496)
+        layOut(view, 951, 669)
+        try expectInPlace(engine, textView)
+        try play(engine, textView, to: walk.foldBackAt)
+        layOut(view, 466, 678)
+        try expectInPlace(engine, textView)
+        try play(engine, textView, to: walk.bookAt)
+        if walk.tall { layOut(view, 669, 951) } else { layOut(view, 951, 669) }
+        try expectInPlace(engine, textView)
+        try play(engine, textView, to: engine.position + 2600)
+    }
+
+    /// The same on an iPhone held in landscape: a pinch, then a turn to portrait, deep in a long take (before the fix
+    /// TextKit drew line 167 at the reading line for the engine's 127 after the pinch, and 706 for 504 after the turn).
+    @Test func aPinchAndATurnDeepInATakeDrawEveryLineWhereTheEngineHasIt() throws {
+        let body = Array(repeating: SampleScript.body, count: 4).joined(separator: "\n\n")
+        let (controller, view, textView) = try makeView(body: body, foldable: false)
+        let engine = controller.engine
+        layOut(view, 874, 402)
+        try play(engine, textView, to: engine.maxPosition * 0.3)
+        var bigger = PrompterSettings()
+        bigger.fontSize = 84
+        view.update(document: controller.document, settings: bigger)
+        try expectInPlace(engine, textView)
+        try play(engine, textView, to: engine.maxPosition * 0.65)
+        layOut(view, 402, 874)
+        try expectInPlace(engine, textView)
+        try play(engine, textView, to: engine.maxPosition)
+    }
+}

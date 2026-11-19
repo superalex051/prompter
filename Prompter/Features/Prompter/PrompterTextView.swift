@@ -65,8 +65,8 @@ final class PrompterTextView: UIView {
         settings = newSettings
         // Resized but not laid out yet: the layout pass sizes the text view first, then applies all of this. SwiftUI can
         // hand over settings in between (seen on iPhone Duo: the take folded back to the cover, then opened to Book with
-        // Landscape only on). Applied there, the text was measured in the old frame (and with the frame set first, TextKit
-        // still drew it lines away from the measured layout), so the take scrolled past the drawn text into blank.
+        // Landscape only on). Applied there, the text was measured in the text view's old frame, so the engine scrolled a
+        // layout that was not the one on screen, on into blank.
         guard textView.frame == bounds else {
             setNeedsLayout()
             return
@@ -98,6 +98,13 @@ final class PrompterTextView: UIView {
 
         let replacesText = document != appliedDocument || style.needsNewText(comparedTo: appliedStyle)
         if replacesText {
+            // Lay the new text out from the top. Laid out with the text view still scrolled deep into the old text,
+            // TextKit 2 drew a block of paragraphs several hundred points away from where the whole-document layout below
+            // (the engine's) has them. After a fold deep in a take on iPhone Duo the take then read through the wrong
+            // text, 5 to 10 lines off. In tests a pinch or a turn deep in an iPhone take did the same, by dozens of lines.
+            // From the top it never happened (PrompterTextViewDeepRelayoutTests). `showOffset` below scrolls back before
+            // anything is drawn.
+            textView.contentOffset = .zero
             backgroundColor = style.scheme.backgroundUIColor
             textView.backgroundColor = style.scheme.backgroundUIColor
             textView.attributedText = PrompterText.attributedString(document, style: style)
@@ -336,7 +343,7 @@ final class PrompterTextView: UIView {
         guard let since = probeSince else { probeSince = time; return }
         guard time - since >= 1 else { return }
         DuoProbe.log("frames \(probeFrames) in \(String(format: "%.2f", time - since)) s, longest \(Int((probeLongestFrame * 1000).rounded())) ms"
-            + " · \(engine.state) · \(probeReadingPoint()) · \(probeTextKitCheck())")
+            + " · \(engine.state) · \(probeReadingPoint())" + (DuoProbe.checksTextKit ? " · \(probeTextKitCheck())" : ""))
         probeFrames = 0
         probeLongestFrame = 0
         probeSince = time

@@ -58,6 +58,8 @@ private struct DuoProbeHingeModifier: ViewModifier {
 enum DuoProbe {
     /// `-duoProbe` was passed: the prompter logs its relayouts, frames and orientation lock here too.
     static let isEnabled = LaunchOptions().duoProbe
+    /// `-duoProbeTextKit` too: the prompter's frames line also compares TextKit's line at the reading line with the engine's.
+    static let checksTextKit = isEnabled && LaunchOptions().duoProbeTextKit
 
     static func describe(
         _ proxy: GeometryProxy, safeInsets i: EdgeInsets, horizontal: UserInterfaceSizeClass?, vertical: UserInterfaceSizeClass?
@@ -138,6 +140,7 @@ extension View {
 @MainActor
 enum DuoProbe {
     static let isEnabled = false
+    static let checksTextKit = false
     static func log(_ line: @autoclosure () -> String) {}
 }
 #endif

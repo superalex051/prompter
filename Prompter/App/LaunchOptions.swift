@@ -44,6 +44,9 @@ struct LaunchOptions: Equatable, Sendable {
     /// Debug builds: "-duoProbe" logs the window's shape (size, size classes, the fold, the hinge) on every change to
     /// Documents/duo-probe.log. See DuoProbe.swift.
     var duoProbe: Bool = false
+    /// Debug builds: "-duoProbeTextKit", with `-duoProbe`, adds TextKit's own line at the reading line to the prompter's
+    /// once-a-second line (the app never asks TextKit that otherwise, so takes measured without it run as shipped).
+    var duoProbeTextKit: Bool = false
     /// "-landscapeOnly NO" (or YES): with `-demoData`, the prompter opens with "Landscape only" set this way (the throwaway
     /// settings start with it on). Used to check the prompter on a foldable with the lock off. nil: the setting as it is.
     var landscapeOnly: Bool?
@@ -86,6 +89,7 @@ struct LaunchOptions: Equatable, Sendable {
         autoStart = Self.flag("autoStart", in: arguments)
         noWatchPush = Self.flag("noWatchPush", in: arguments)
         duoProbe = Self.flag("duoProbe", in: arguments)
+        duoProbeTextKit = Self.flag("duoProbeTextKit", in: arguments)
         if LaunchArguments.flagIndex("landscapeOnly", in: arguments) != nil {
             landscapeOnly = Self.flag("landscapeOnly", in: arguments)
         }
