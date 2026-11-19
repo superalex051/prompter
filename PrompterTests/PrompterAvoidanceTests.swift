@@ -144,6 +144,69 @@ struct PrompterAvoidanceTests {
         #expect(insets.leading == 0 && insets.trailing == 0)
     }
 
+    // MARK: Progress bar
+
+    /// The HUD's 3 pt progress bar on the cover in landscape left: the label row's length, about 453 down.
+    static let coverBar = CGRect(x: 44, y: 452, width: 590, height: 3)
+
+    @Test func barStaysWholeWithNothingInTheWay() {
+        let none = Avoid.barInsets(bar: Self.coverBar, blocks: [])
+        #expect(none.leading == 0 && none.trailing == 0)
+        // The cover in landscape right: the camera and its region at the top left, nowhere near the bar.
+        let top = Avoid.barInsets(bar: Self.coverBar,
+                                  blocks: [CGRect(x: 29, y: 29, width: 37, height: 37), CGRect(x: 0, y: 0, width: 84, height: 82)])
+        #expect(top.leading == 0 && top.trailing == 0)
+    }
+
+    /// The finding: on the cover in landscape left the bar ran through the region round the camera. Mirror off, the
+    /// region is over the bar's trailing end: the bar ends a gap short of it, where the speed label now ends too.
+    @Test func barEndsShortOfTheCamera() {
+        let insets = Avoid.barInsets(bar: Self.coverBar, blocks: [Self.coverCamera, Self.coverCluster])
+        #expect(insets.leading == 0)
+        #expect(insets.trailing == 634 - (594 - Avoid.gap))
+        let shortened = CGRect(x: Self.coverBar.minX, y: Self.coverBar.minY,
+                               width: Self.coverBar.width - insets.trailing, height: Self.coverBar.height)
+        #expect(!shortened.intersects(Self.coverCamera) && !shortened.intersects(Self.coverCluster))
+        let (leading, trailing) = Self.corners()
+        let labels = Avoid.cornerInsets(leading: leading, trailing: trailing, row: Self.labelRow,
+                                        blocks: [Self.coverCamera, Self.coverCluster])
+        #expect(insets.trailing == labels.trailing)
+    }
+
+    /// Mirrored (the default), the canvas's leading end is the screen's right: the bar starts short of the camera there.
+    @Test func mirroredTheBarStartsShortOfTheCamera() {
+        let mirror = PrompterCanvasTransform.canvasToScreen(rotation: .none, mirror: true, flip: false, screenSize: Self.cover)
+        let blocks = [Self.coverCamera, Self.coverCluster].map { $0.applying(mirror.inverted()) }
+        let insets = Avoid.barInsets(bar: Self.coverBar, blocks: blocks)
+        #expect(insets.trailing == 0)
+        #expect(abs(insets.leading - (84 + Avoid.gap - 44)) < 0.001)
+        let shortened = CGRect(x: Self.coverBar.minX + insets.leading, y: Self.coverBar.minY,
+                               width: Self.coverBar.width - insets.leading, height: Self.coverBar.height)
+        let onScreen = shortened.applying(mirror)
+        #expect(onScreen.maxX <= Self.coverCluster.minX - Avoid.gap + 0.001)
+        #expect(abs(onScreen.minX - 44) < 0.001)
+    }
+
+    @Test func aFoldAcrossTheBarLeavesItWhole() {
+        // Book: the fold crosses the open screen's bar in the middle, as it crosses the text.
+        let openBar = CGRect(x: 57, y: 652, width: 837, height: 3)
+        let book = Avoid.barInsets(bar: openBar, blocks: [Self.bookFold])
+        #expect(book.leading == 0 && book.trailing == 0)
+        let mirror = PrompterCanvasTransform.canvasToScreen(rotation: .none, mirror: true, flip: false, screenSize: Self.open)
+        let mirrored = Avoid.barInsets(bar: openBar, blocks: [Self.bookFold.applying(mirror.inverted())])
+        #expect(mirrored.leading == 0 && mirrored.trailing == 0)
+        // Tabletop, held tall: the fold runs across the middle of the screen, far above the bar.
+        let tallBar = CGRect(x: 40, y: 934, width: 589, height: 3)
+        let tabletop = Avoid.barInsets(bar: tallBar, blocks: [Self.tabletopFold])
+        #expect(tabletop.leading == 0 && tabletop.trailing == 0)
+    }
+
+    @Test func barStaysWholeWhenTheBlockCoversAllOfIt() {
+        let band = CGRect(x: 0, y: 440, width: 678, height: 26)
+        let insets = Avoid.barInsets(bar: Self.coverBar, blocks: [band])
+        #expect(insets.leading == 0 && insets.trailing == 0)
+    }
+
     // MARK: Close button
 
     /// The close button: 44 pt, 12 pt in from the top leading corner of the safe area.

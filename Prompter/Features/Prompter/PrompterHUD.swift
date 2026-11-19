@@ -14,7 +14,8 @@ struct PrompterHUD: View {
     let fontSize: Double
     /// An active fold (iPhone Duo in Book posture) and the camera, in canvas points: the state word steps off them the
     /// shorter way along its row (`PrompterAvoidance.wordShift`), the corner labels come in from the row's ends
-    /// (`PrompterAvoidance.cornerInsets`). Empty everywhere else, and then nothing moves.
+    /// (`PrompterAvoidance.cornerInsets`) and the progress bar ends short of the camera (`PrompterAvoidance.barInsets`).
+    /// Empty everywhere else, and then nothing moves.
     var avoiding: [CGRect] = []
     /// Canvas to screen points, so a tie goes to the screen's trailing side whatever the mirror.
     var toScreen: CGAffineTransform = .identity
@@ -26,6 +27,7 @@ struct PrompterHUD: View {
     @State private var wordWidth: CGFloat = 0
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
+    @State private var barFrame: CGRect = .zero
 
     var body: some View {
         let state = engine.state
@@ -69,6 +71,10 @@ struct PrompterHUD: View {
             .lineLimit(1)
 
             ProgressBar(engine: engine, track: foreground.opacity(0.2), fill: accent)
+                // Measured with the padding included, so shortening the bar never moves the frame it is placed by.
+                .padding(.leading, barInsets.leading)
+                .padding(.trailing, barInsets.trailing)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.canvasSpace)) } action: { barFrame = $0 }
         }
         .padding(.horizontal, horizontalInset)
         .padding(.top, Self.feather + 8)
@@ -108,6 +114,13 @@ struct PrompterHUD: View {
         let leading = CGRect(x: rowFrame.minX, y: rowFrame.minY, width: leadingWidth, height: rowFrame.height)
         let trailing = CGRect(x: rowFrame.maxX - trailingWidth, y: rowFrame.minY, width: trailingWidth, height: rowFrame.height)
         return PrompterAvoidance.cornerInsets(leading: leading, trailing: trailing, row: rowFrame, blocks: avoiding)
+    }
+
+    /// How far in from each end the progress bar stops to clear the camera (0 and 0 with nothing in the way), the same
+    /// way the corner labels come in. `barFrame` is the bar's full length, so the shortening doesn't feed back.
+    private var barInsets: (leading: CGFloat, trailing: CGFloat) {
+        guard !avoiding.isEmpty, barFrame.width > 0 else { return (0, 0) }
+        return PrompterAvoidance.barInsets(bar: barFrame, blocks: avoiding)
     }
 
     /// "Tap to start" (idle: what to do, where VoiceOver says "Ready"), "Paused" or "End"; "Pause 3" while a `[pause 3]`

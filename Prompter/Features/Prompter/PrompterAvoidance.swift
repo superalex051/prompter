@@ -1,8 +1,8 @@
 import CoreGraphics
 
 /// Where the prompter's few fixed pieces go so an active fold or the camera never sits on them (iPhone Duo): the
-/// countdown digit, the HUD's state word and corner labels, and the close button. Pure geometry, so it is tested without
-/// a window.
+/// countdown digit, the HUD's state word, corner labels and progress bar, and the close button. Pure geometry, so it is
+/// tested without a window.
 ///
 /// `blocks` are the reserved regions the system reports as ACTIVE, margins included: the fold only while the device is
 /// partly folded (Book), the cover's camera always. Lying flat in the rig the fold is inactive, so nothing moves there,
@@ -62,6 +62,23 @@ enum PrompterAvoidance {
             return abs(settle(label, row: row, blocks: blocks, rightwards: rightwards) ?? 0)
         }
         return (inset(leading, rightwards: true), inset(trailing, rightwards: false))
+    }
+
+    /// The HUD's progress bar, in canvas points: how far in from each end it stops so the camera never sits on it (the
+    /// cover in landscape left puts the camera, and the region round it, over the bar's end). Only a block that covers
+    /// an end of the bar counts, and the bar then ends a gap short of it, as the corner labels do. The fold crossing the
+    /// bar in Book leaves it whole, as it leaves the text. 0 and 0 when nothing is in the way, or when what is in the way
+    /// would leave no bar at all.
+    static func barInsets(bar: CGRect, blocks: [CGRect]) -> (leading: CGFloat, trailing: CGFloat) {
+        guard !bar.isEmpty else { return (0, 0) }
+        var leading: CGFloat = 0
+        var trailing: CGFloat = 0
+        for block in blocks where overlaps(block, bar.insetBy(dx: -gap, dy: 0)) {
+            if block.minX - gap < bar.minX { leading = max(leading, block.maxX + gap - bar.minX) }
+            if block.maxX + gap > bar.maxX { trailing = max(trailing, bar.maxX - (block.minX - gap)) }
+        }
+        guard leading + trailing < bar.width else { return (0, 0) }
+        return (leading, trailing)
     }
 
     /// How far to move `rect` along its row, one way only, to a spot that clears every block by `gap`: step past whatever
