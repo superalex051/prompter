@@ -14,8 +14,8 @@ struct LibraryView: View {
     @State private var navigation = LibraryNavigation()
     /// The window's full width, for `LibraryLayout` (nil until the first layout pass).
     @State private var windowWidth: CGFloat?
-    /// The editor's keyboard across a layout switch; see `EditorKeyboard`.
-    @State private var keyboard = EditorKeyboard()
+    /// The editor's keyboard across a layout switch; see `EditorKeyboard`. Not observed (see `EditorKeyboardHandoff`).
+    @State private var keyboard = EditorKeyboardHandoff()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var prompterTarget: PrompterTarget?
     @State private var isImporting = false
@@ -89,8 +89,9 @@ struct LibraryView: View {
             }
             .onChange(of: store.lastError) { _, newValue in showStoreError(newValue) }
             .onChange(of: layoutKind) { _, kind in
-                keyboard.layoutChanged(openScript: navigation.openScript)
+                keyboard.state.layoutChanged(openScript: navigation.openScript)
                 debugNote("library layout \(kind), open \(navigation.openScript.map { "\($0)" } ?? "none"), "
+                    + "keyboard to \(String(describing: keyboard.state.pending?.field)), "
                     + "columns \(String(describing: columnVisibility))")
                 // The split view always comes back with both columns. The finding: after one round trip (split, stack,
                 // split) the sidebar stayed hidden, so the second unfold of the iPhone Duo showed the editor or "Pick a
@@ -101,10 +102,6 @@ struct LibraryView: View {
             }
             #if DEBUG
             .onChange(of: columnVisibility) { _, columns in debugNote("library columns \(String(describing: columns))") }
-            .onChange(of: keyboard) { _, keyboard in
-                let current = String(describing: keyboard.current?.field)
-                debugNote("editor keyboard \(current), pending \(String(describing: keyboard.pending?.field))")
-            }
             #endif
             .focusedSceneValue(\.newScriptAction, splits && prompterTarget == nil ? newScript : nil)
             .task {
@@ -244,7 +241,7 @@ struct LibraryView: View {
             scriptID: id,
             onPrompt: { prompterTarget = PrompterTarget(id: $0) },
             isOpen: { navigation.isOpen($0) },
-            keyboard: $keyboard
+            keyboard: keyboard
         )
     }
 

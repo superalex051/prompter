@@ -9,7 +9,7 @@ struct EditorView: View {
     /// for the other layout (the iPhone Duo folding or unfolding), not left by the person.
     var isOpen: (Script.ID) -> Bool = { _ in false }
     /// The keyboard across a layout switch (see `EditorKeyboard`); nil where the layout never switches (previews).
-    var keyboard: Binding<EditorKeyboard>?
+    var keyboard: EditorKeyboardHandoff?
 
     @Environment(ScriptStore.self) private var store
 
@@ -28,6 +28,14 @@ struct EditorView: View {
             if !isOpen(scriptID) { store.deleteIfBlank(scriptID) }
         }
     }
+}
+
+/// Holds `EditorKeyboard` for the library and its editors. A plain reference that SwiftUI doesn't observe, on purpose:
+/// the editor reports every focus change here, and as view state those reports redrew the whole library each time the
+/// keyboard came up, which on iPhone cleared the keyboard's word suggestions and moved the editor's scroll.
+@MainActor
+final class EditorKeyboardHandoff {
+    var state = EditorKeyboard()
 }
 
 /// The editor's keyboard across a layout switch. Each library layout builds its own editor, so when the iPhone Duo folds
@@ -86,7 +94,7 @@ private struct EditorContent: View {
     private let storedTitle: String
     private let opensBlank: Bool
     private let onPrompt: (Script.ID) -> Void
-    private let keyboard: Binding<EditorKeyboard>?
+    private let keyboard: EditorKeyboardHandoff?
 
     @Environment(ScriptStore.self) private var store
     @Environment(SettingsStore.self) private var settingsStore
@@ -103,7 +111,7 @@ private struct EditorContent: View {
     private let editorTextInset: CGFloat = 5
     private let editorTopInset: CGFloat = 8
 
-    init(script: Script, onPrompt: @escaping (Script.ID) -> Void, keyboard: Binding<EditorKeyboard>?) {
+    init(script: Script, onPrompt: @escaping (Script.ID) -> Void, keyboard: EditorKeyboardHandoff?) {
         scriptID = script.id
         storedTitle = script.title
         opensBlank = script.isBlank
@@ -165,7 +173,7 @@ private struct EditorContent: View {
         .onChange(of: storedTitle) { adoptStoredTitle() }
         .onChange(of: focus) { old, new in
             if old == .title { adoptStoredTitle() }
-            if let keyboard { keyboard.wrappedValue.focusChanged(to: new, in: scriptID) }
+            keyboard?.state.focusChanged(to: new, in: scriptID)
         }
         .onChange(of: bodyText) { _, newValue in
             store.update(scriptID, body: newValue)
@@ -200,7 +208,7 @@ private struct EditorContent: View {
             guard opensBlank || keyboard != nil, !didAutofocus else { return }
             didAutofocus = true
             try? await Task.sleep(for: .milliseconds(450))
-            if let keyboard, let handoff = keyboard.wrappedValue.take(for: scriptID) {
+            if let handoff = keyboard?.state.take(for: scriptID) {
                 focus = handoff.field
             } else if opensBlank {
                 focus = .body
