@@ -90,9 +90,17 @@ struct LibraryView: View {
             .onChange(of: store.lastError) { _, newValue in showStoreError(newValue) }
             .onChange(of: layoutKind) { _, kind in
                 keyboard.layoutChanged(openScript: navigation.openScript)
-                debugNote("library layout \(kind), open \(navigation.openScript.map { "\($0)" } ?? "none")")
+                debugNote("library layout \(kind), open \(navigation.openScript.map { "\($0)" } ?? "none"), "
+                    + "columns \(String(describing: columnVisibility))")
+                // The split view always comes back with both columns. The finding: after one round trip (split, stack,
+                // split) the sidebar stayed hidden, so the second unfold of the iPhone Duo showed the editor or "Pick a
+                // script" with the list behind the sidebar button again.
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { columnVisibility = .all }
             }
             #if DEBUG
+            .onChange(of: columnVisibility) { _, columns in debugNote("library columns \(String(describing: columns))") }
             .onChange(of: keyboard) { _, keyboard in
                 let current = String(describing: keyboard.current?.field)
                 debugNote("editor keyboard \(current), pending \(String(describing: keyboard.pending?.field))")
