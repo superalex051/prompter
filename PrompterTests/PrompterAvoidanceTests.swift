@@ -81,6 +81,69 @@ struct PrompterAvoidanceTests {
         #expect(Avoid.wordShift(word: Self.word, row: Self.row, blocks: [band], toScreen: .identity) == 0)
     }
 
+    // MARK: Corner labels
+
+    /// The cover in landscape left, 678 × 466, as measured: the camera at 611,399 37 × 37 inside the status cluster's
+    /// region at 594,384 84 × 82, both at the bottom right. The HUD's label row runs 44 pt in from each side, about 420 to
+    /// 442 down; time left about 40 pt wide, the speed about 90.
+    static let cover = CGSize(width: 678, height: 466)
+    static let coverCamera = CGRect(x: 611, y: 399, width: 37, height: 37)
+    static let coverCluster = CGRect(x: 594, y: 384, width: 84, height: 82)
+    static let labelRow = CGRect(x: 44, y: 420, width: 590, height: 22)
+
+    static func corners(leading: CGFloat = 40, trailing: CGFloat = 90) -> (CGRect, CGRect) {
+        let row = labelRow
+        return (CGRect(x: row.minX, y: row.minY, width: leading, height: row.height),
+                CGRect(x: row.maxX - trailing, y: row.minY, width: trailing, height: row.height))
+    }
+
+    @Test func cornerLabelsStayPutWithNothingInTheWay() {
+        let (leading, trailing) = Self.corners()
+        let none = Avoid.cornerInsets(leading: leading, trailing: trailing, row: Self.labelRow, blocks: [])
+        #expect(none.leading == 0 && none.trailing == 0)
+        // The camera at the top left (the cover in landscape right) is nowhere near the row.
+        let top = Avoid.cornerInsets(leading: leading, trailing: trailing, row: Self.labelRow,
+                                     blocks: [CGRect(x: 29, y: 29, width: 37, height: 37), CGRect(x: 0, y: 0, width: 84, height: 82)])
+        #expect(top.leading == 0 && top.trailing == 0)
+        // The open screen's fold in Book crosses the row in the middle: the state word's business, not the corners'.
+        let open = CGRect(x: 57, y: 610, width: 837, height: 40)
+        let fold = Avoid.cornerInsets(
+            leading: CGRect(x: 57, y: 610, width: 40, height: 40), trailing: CGRect(x: 804, y: 610, width: 90, height: 40),
+            row: open, blocks: [Self.bookFold])
+        #expect(fold.leading == 0 && fold.trailing == 0)
+    }
+
+    /// The finding: on the cover in landscape left the camera sat on the HUD's corner label (the speed with Mirror off).
+    /// It comes in just far enough to clear the whole region round the camera, a gap clear.
+    @Test func cornerLabelComesInFromTheCamera() {
+        let (leading, trailing) = Self.corners()
+        let insets = Avoid.cornerInsets(leading: leading, trailing: trailing, row: Self.labelRow,
+                                        blocks: [Self.coverCamera, Self.coverCluster])
+        #expect(insets.leading == 0)
+        #expect(insets.trailing == 634 - (594 - Avoid.gap))
+        let moved = trailing.offsetBy(dx: -insets.trailing, dy: 0)
+        #expect(!moved.intersects(Self.coverCamera) && !moved.intersects(Self.coverCluster))
+    }
+
+    /// Mirrored (the default), the canvas's leading end is the screen's right, so the time left comes in instead.
+    @Test func mirroredTheTimeLeftComesInFromTheCamera() {
+        let mirror = PrompterCanvasTransform.canvasToScreen(rotation: .none, mirror: true, flip: false, screenSize: Self.cover)
+        let blocks = [Self.coverCamera, Self.coverCluster].map { $0.applying(mirror.inverted()) }
+        let (leading, trailing) = Self.corners()
+        let insets = Avoid.cornerInsets(leading: leading, trailing: trailing, row: Self.labelRow, blocks: blocks)
+        #expect(insets.trailing == 0)
+        #expect(abs(insets.leading - (84 + Avoid.gap - 44)) < 0.001)
+        let onScreen = leading.offsetBy(dx: insets.leading, dy: 0).applying(mirror)
+        #expect(onScreen.maxX <= Self.coverCluster.minX - Avoid.gap + 0.001)
+    }
+
+    @Test func cornerLabelStaysWhenNoMoveAlongTheRowClearsIt() {
+        let (leading, trailing) = Self.corners()
+        let band = CGRect(x: 0, y: 410, width: 678, height: 40)
+        let insets = Avoid.cornerInsets(leading: leading, trailing: trailing, row: Self.labelRow, blocks: [band])
+        #expect(insets.leading == 0 && insets.trailing == 0)
+    }
+
     // MARK: Close button
 
     /// The close button: 44 pt, 12 pt in from the top leading corner of the safe area.

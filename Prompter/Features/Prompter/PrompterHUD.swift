@@ -12,8 +12,9 @@ struct PrompterHUD: View {
     var accent: Color = .accentColor
     let horizontalInset: Double
     let fontSize: Double
-    /// An active fold (iPhone Duo in Book posture), in canvas points: the state word steps off it the shorter way along
-    /// its row (`PrompterAvoidance.wordShift`). Empty everywhere else, and then nothing moves.
+    /// An active fold (iPhone Duo in Book posture) and the camera, in canvas points: the state word steps off them the
+    /// shorter way along its row (`PrompterAvoidance.wordShift`), the corner labels come in from the row's ends
+    /// (`PrompterAvoidance.cornerInsets`). Empty everywhere else, and then nothing moves.
     var avoiding: [CGRect] = []
     /// Canvas to screen points, so a tie goes to the screen's trailing side whatever the mirror.
     var toScreen: CGAffineTransform = .identity
@@ -23,6 +24,8 @@ struct PrompterHUD: View {
 
     @State private var rowFrame: CGRect = .zero
     @State private var wordWidth: CGFloat = 0
+    @State private var leadingWidth: CGFloat = 0
+    @State private var trailingWidth: CGFloat = 0
 
     var body: some View {
         let state = engine.state
@@ -45,9 +48,14 @@ struct PrompterHUD: View {
             ZStack {
                 HStack {
                     Text(TimeFormatting.clock(remaining))
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { leadingWidth = $0 }
                     Spacer(minLength: 16)
                     Text(speedLabel)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trailingWidth = $0 }
                 }
+                // Inside the measured row, so moving the labels never moves the row they are placed by.
+                .padding(.leading, cornerInsets.leading)
+                .padding(.trailing, cornerInsets.trailing)
                 if let word = Self.stateWord(for: state, holdSeconds: hold, isListening: isListening) {
                     Text(word)
                         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { wordWidth = $0 }
@@ -91,6 +99,15 @@ struct PrompterHUD: View {
         guard !avoiding.isEmpty, rowFrame.width > 0, wordWidth > 0 else { return 0 }
         let word = CGRect(x: rowFrame.midX - wordWidth / 2, y: rowFrame.minY, width: wordWidth, height: rowFrame.height)
         return PrompterAvoidance.wordShift(word: word, row: rowFrame, blocks: avoiding, toScreen: toScreen)
+    }
+
+    /// How far the time-left and speed labels come in from the row's ends to clear the camera (0 and 0 with nothing in
+    /// the way). Placed unmoved at the row's two ends, measured by their widths only, so the move doesn't feed back.
+    private var cornerInsets: (leading: CGFloat, trailing: CGFloat) {
+        guard !avoiding.isEmpty, rowFrame.width > 0 else { return (0, 0) }
+        let leading = CGRect(x: rowFrame.minX, y: rowFrame.minY, width: leadingWidth, height: rowFrame.height)
+        let trailing = CGRect(x: rowFrame.maxX - trailingWidth, y: rowFrame.minY, width: trailingWidth, height: rowFrame.height)
+        return PrompterAvoidance.cornerInsets(leading: leading, trailing: trailing, row: rowFrame, blocks: avoiding)
     }
 
     /// "Tap to start" (idle: what to do, where VoiceOver says "Ready"), "Paused" or "End"; "Pause 3" while a `[pause 3]`
