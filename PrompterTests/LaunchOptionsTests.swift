@@ -126,6 +126,16 @@ struct LaunchOptionsAutoStartTests {
         #expect(!LaunchOptions(arguments: ["-noWatchPush", "NO"]).noWatchPush)
     }
 
+    /// Screenshots: the demo library paired with a made-up Mac, for the screens that show only while a Mac is paired.
+    @Test func demoPairedMacFlag() {
+        #expect(!LaunchOptions(arguments: []).demoPairedMac)
+        #expect(!LaunchOptions(arguments: ["-demoData", "-route", "syncSettings"]).demoPairedMac)
+        let options = LaunchOptions(arguments: ["-demoData", "-demoPairedMac", "-route", "syncSettings"])
+        #expect(options.demoPairedMac)
+        #expect(options.demoData)
+        #expect(options.route == .syncSettings)
+    }
+
     @Test func prompterSettingsRouteIsCaseInsensitive() {
         #expect(LaunchOptions(arguments: ["-route", "prompterSettings"]).route == .prompterSettings)
         #expect(LaunchOptions(arguments: ["-route", "promptersettings"]).route == .prompterSettings)

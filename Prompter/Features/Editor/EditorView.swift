@@ -5,20 +5,73 @@ import SwiftUI
 struct EditorView: View {
     let scriptID: Script.ID
     var onPrompt: (Script.ID) -> Void
+    /// Whether the library still has this script open. An editor that goes away while it is still open was only rebuilt
+    /// for the other layout (the iPhone Duo folding or unfolding), not left by the person.
+    var isOpen: (Script.ID) -> Bool = { _ in false }
+    /// The keyboard across a layout switch (see `EditorKeyboard`); nil where the layout never switches (previews).
+    var keyboard: Binding<EditorKeyboard>?
 
     @Environment(ScriptStore.self) private var store
 
     var body: some View {
         Group {
             if let script = store.script(id: scriptID) {
-                EditorContent(script: script, onPrompt: onPrompt)
+                EditorContent(script: script, onPrompt: onPrompt, keyboard: keyboard)
             } else {
                 ContentUnavailableView("Script deleted", systemImage: "doc")
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        // A new script that was never typed into shouldn't be left behind in the library.
-        .onDisappear { store.deleteIfBlank(scriptID) }
+        // A new script that was never typed into shouldn't be left behind in the library. Not when the editor was only
+        // rebuilt for the other layout: the script is still open there, blank or not.
+        .onDisappear {
+            if !isOpen(scriptID) { store.deleteIfBlank(scriptID) }
+        }
+    }
+}
+
+/// The editor's keyboard across a layout switch. Each library layout builds its own editor, so when the iPhone Duo folds
+/// or unfolds between the split view and the stack, a new editor takes over and the keyboard went down mid-sentence.
+/// The open editor reports the field it types in; at a layout switch the library keeps that, and the new editor for the
+/// same script puts the cursor back in that field.
+struct EditorKeyboard: Equatable, Sendable {
+    enum Field: Hashable, Sendable {
+        case title
+        case body
+    }
+
+    /// What a layout switch leaves for the next editor of `scriptID`: the field to type in, or nil to keep the keyboard
+    /// down.
+    struct Handoff: Equatable, Sendable {
+        var scriptID: Script.ID
+        var field: Field?
+    }
+
+    /// The open editor's script and the field it types in (nil while the keyboard is down).
+    private(set) var current: Handoff?
+    /// Left by the last layout switch, until the new editor takes it.
+    private(set) var pending: Handoff?
+
+    /// The editor of `scriptID` moved its focus (nil: the keyboard went down).
+    mutating func focusChanged(to field: Field?, in scriptID: Script.ID) {
+        current = Handoff(scriptID: scriptID, field: field)
+    }
+
+    /// The library switched layout with `openScript` open: its new editor should type where the old one did.
+    mutating func layoutChanged(openScript: Script.ID?) {
+        guard let openScript else {
+            pending = nil
+            return
+        }
+        pending = Handoff(scriptID: openScript, field: current?.scriptID == openScript ? current?.field : nil)
+    }
+
+    /// The new editor of `scriptID` takes what the layout switch left for it (nil when the editor was not rebuilt by a
+    /// switch, or was rebuilt for another script).
+    mutating func take(for scriptID: Script.ID) -> Handoff? {
+        guard let pending, pending.scriptID == scriptID else { return nil }
+        self.pending = nil
+        return pending
     }
 }
 
@@ -26,16 +79,14 @@ struct EditorView: View {
 /// never overwritten from the store while typing, so the cursor never jumps. The one exception is the title: when it
 /// changes in the store (a rename from the iPad sidebar) and the title field isn't being edited, the draft follows it.
 private struct EditorContent: View {
-    private enum Field: Hashable {
-        case title
-        case body
-    }
+    private typealias Field = EditorKeyboard.Field
 
     private let scriptID: Script.ID
     /// The title as the store has it right now (the drafts below are only where typing happens).
     private let storedTitle: String
     private let opensBlank: Bool
     private let onPrompt: (Script.ID) -> Void
+    private let keyboard: Binding<EditorKeyboard>?
 
     @Environment(ScriptStore.self) private var store
     @Environment(SettingsStore.self) private var settingsStore
@@ -52,11 +103,12 @@ private struct EditorContent: View {
     private let editorTextInset: CGFloat = 5
     private let editorTopInset: CGFloat = 8
 
-    init(script: Script, onPrompt: @escaping (Script.ID) -> Void) {
+    init(script: Script, onPrompt: @escaping (Script.ID) -> Void, keyboard: Binding<EditorKeyboard>?) {
         scriptID = script.id
         storedTitle = script.title
         opensBlank = script.isBlank
         self.onPrompt = onPrompt
+        self.keyboard = keyboard
         _title = State(initialValue: script.title)
         _bodyText = State(initialValue: script.body)
     }
@@ -111,8 +163,9 @@ private struct EditorContent: View {
         }
         // A rename from the sidebar must not be overwritten by this editor's older draft of the title.
         .onChange(of: storedTitle) { adoptStoredTitle() }
-        .onChange(of: focus) { old, _ in
+        .onChange(of: focus) { old, new in
             if old == .title { adoptStoredTitle() }
+            if let keyboard { keyboard.wrappedValue.focusChanged(to: new, in: scriptID) }
         }
         .onChange(of: bodyText) { _, newValue in
             store.update(scriptID, body: newValue)
@@ -141,12 +194,17 @@ private struct EditorContent: View {
             }
         }
         .task {
-            // A brand-new script opens ready to type. The short pause lets the push animation settle,
-            // because focus set during the transition is often dropped.
-            guard opensBlank, !didAutofocus else { return }
+            // A brand-new script opens ready to type, and an editor rebuilt by a layout switch (the iPhone Duo folding or
+            // unfolding) types where the old one did. The short pause lets the push animation settle, because focus set
+            // during the transition is often dropped; it also gives the library time to leave the handoff.
+            guard opensBlank || keyboard != nil, !didAutofocus else { return }
             didAutofocus = true
             try? await Task.sleep(for: .milliseconds(450))
-            focus = .body
+            if let keyboard, let handoff = keyboard.wrappedValue.take(for: scriptID) {
+                focus = handoff.field
+            } else if opensBlank {
+                focus = .body
+            }
         }
     }
 

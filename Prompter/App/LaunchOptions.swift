@@ -44,6 +44,10 @@ struct LaunchOptions: Equatable, Sendable {
     /// Debug builds: "-duoProbe" logs the window's shape (size, size classes, the fold, the hinge) on every change to
     /// Documents/duo-probe.log. See DuoProbe.swift.
     var duoProbe: Bool = false
+    /// Debug builds with `-demoData`: "-demoPairedMac" pairs the throwaway library with a made-up Mac (`DemoData.macName`),
+    /// so the screens that show only while a Mac is paired (the library's Remote for Mac button, Settings, Sync with Mac,
+    /// Remote for Mac pushed from there) can be screenshotted. Nothing ever connects to it.
+    var demoPairedMac: Bool = false
 
     init(arguments: [String] = LaunchArguments.process) {
         if let value = Self.value(after: "route", in: arguments), let route = Route(rawValue: value.lowercased()) {
@@ -61,6 +65,7 @@ struct LaunchOptions: Equatable, Sendable {
         autoStart = Self.flag("autoStart", in: arguments)
         noWatchPush = Self.flag("noWatchPush", in: arguments)
         duoProbe = Self.flag("duoProbe", in: arguments)
+        demoPairedMac = Self.flag("demoPairedMac", in: arguments)
     }
 
     /// `voiceFile` as a file URL: absolute paths as they are, relative ones under `home` (the app's data container).
