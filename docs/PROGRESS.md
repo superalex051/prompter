@@ -702,7 +702,7 @@ Checks:
   screen awake for a whole take. Update all three apps together.
 
 
-## iPhone Duo: ready on the cover, the open postures still to check (2026-11-19, overnight)
+## iPhone Duo: ready folded and open (2026-11-19, overnight)
 Plan: `docs/superpowers/plans/2026-11-19-iphone-duo.md`. Branch `duo/optimize` (from `launch`), built overnight by three builders
 (prompter, library, QA tooling) in separate worktrees, each reviewed by independent agents and fixed, then merged and
 checked again as one. Nothing is pushed or merged into `launch`. The Duo is Apple's foldable: cover screen 466x678 pt, open
@@ -761,46 +761,45 @@ How it was checked (integration run `DUO-INT-1`, then `DUO-FIX-1` after the fixe
 - Pro Max `layout-switch` passes (blank script, typed text and mid-script cursor kept both ways).
 - Screenshots: `docs/screenshots/duo/` (six cover screens).
 
-**Known limit: the Mac's screen locks.** It locked at about 02:07 and stayed locked. Device Hub's posture buttons need
-Accessibility, which cannot see any window on a locked screen, so `scripts/duo-posture.sh` fails and the Duo simulator stays
-on its cover. Open (951x669), open tall (669x951), Book and every real fold or unfold were never seen on the Duo itself. They
-rest on unit tests, the Pro Max stand-in and one early idle unfold.
+**Open postures, checked once the screen was unlocked (evening).** The Mac's screen had locked at about 02:07, and Device
+Hub's posture buttons need Accessibility, which sees no window on a locked screen. After the unlock, on the final code:
+- A fold walk: 8 takes folded, opened and half opened mid-take, Landscape only on and off. The TextKit check compares the
+  line on screen with the engine's line every second: 6 of 6 takes pass with no failing line. Separate reviewers matched every
+  screenshot against the probe log: 8 of 8 pass, no blank text, at most one line apart (the reading point moves under a line
+  a second).
+- Every screen in every posture (folded, folded landscape, open, Book, open tall; 70 shots from both displays), each looked
+  at by a reviewer: all clean after one fix. The `-route syncSettings` launch route set Sync with Mac as the sheet's starting
+  page, which was laid out before the sheet had its size; on the open Duo held wide its cards then ran to the sheet's right
+  edge. The route now pushes the page once the sheet is up, the way a tap does. A tap was never affected, and Release builds
+  read no routes. Duo postures, iPhone and iPad compared pixel for pixel, `scripts/test.sh` green.
+- Folded and held upright, lines already read pass behind the cover camera as they scroll off the top (as under the Dynamic
+  Island on an iPhone). The reading line and the controls stay clear. Left as is.
+- The Duo simulator's PosterBoard (the Lock Screen's wallpaper service) began crashing on every boot during these runs;
+  `simctl erase` on the Duo simulator cleared it.
 
 ### Needs the owner (iPhone Duo)
-1. **Unlock the Mac, open Device Hub with the Duo showing, then run the open postures.** Use `caffeinate -d` so the screen does
-   not lock mid-run. Then:
-   - `DUO_POSTURE=Open SIM="Prompter Dev Duo" scripts/heavy.sh --task X -- scripts/qa.sh`, the same for `OpenTall` and `Closed`.
-   - `scripts/heavy.sh --task X -- scripts/duo-shots.sh <folder>` (every posture is the default), then look at every shot.
-   - The builders' own walks: `.inbox/duo/prompter/measure-run2.sh` (fold back, a take across folds with the lock on and off,
-     settings across a fold, the countdown in Book and tabletop) and `.inbox/duo/library/after.sh <out> build duo before`.
-     The ledger `.inbox/duo/ledger.md` has the rest.
-2. **Landscape only against a fold mid-take.** (A, what the code does) keep the text's direction: after folding an open take
-   the cover goes on in portrait with 466 pt lines until the take closes, while the setting still reads Landscape only.
-   (B) keep landscape: the cover goes back to its own landscape side, so the text turns a quarter turn at the fold and the
-   folded phone has to be turned in the cradle. Either is a small change in `PrompterOrientationPolicy.windowChanged`.
-3. **Unfolding a landscape cover take.** The inner screen ignored the lock once (measured on a simulator held upright). The
-   text may turn a quarter turn. If A is chosen, a temporary extra canvas rotation (never saved, since the rotation setting
-   syncs to the Mac) would make that up. It ships only after a screenshot on the open screen shows it turns the right way.
-4. **Folded default text size: 72 pt or 64 pt.** 72 pt is the same physical letter size as the iPhone rig (both screens are
-   about 460 ppi), which is what fights the ghosting, but the cover shows two words a line in landscape. 64 pt on the cover only
-   gives about three words. The builder's pick is 72.
-5. **The iPad idiom exception in `LibraryLayout`.** Every regular-width iPad keeps the split view by idiom, because a 13 inch
-   iPad's half-screen window is 678 pt, 9 pt from the open-tall Duo (669 pt). Apple's guidance says not to use idiom. Either
-   record the exception in the plan, or replace it later (iOS 27.1, behind `#available`) with the inactive horizontal
-   `.division` region that marks a foldable held tall.
-6. **Editor bar symbols on the cover.** Done and Prompt have no symbol, so they stay as a row across the top of the cover
-   (about 48 pt of writing room with the keyboard up) while Back moves to the side bar. Giving both a symbol and a title would
-   move them to the side bar, but the amber Prompt pill becomes an icon (white on amber, about 1.8:1 contrast). It would be
-   limited to the cover so the iPhone 17 Pro keeps its pill.
-7. **The cursor in the title field.** The script text keeps its cursor across a fold; the title field's cursor goes to the end.
+1. **Merge `duo/optimize` into `launch`.** Everything above passed. Pushing is a separate OK.
+2. **Editor bar on the folded Duo: pick.** A throwaway spike (branch `duo/bar-spike`, never merged) rendered the options on
+   the simulator. Giving Done and Prompt a symbol and a title moves them into the side bar under Back, the top strip goes and
+   the title moves from 95 pt to 37 pt (about 2 more lines; folded on its side while typing, 3 lines instead of 1.5). iOS
+   draws the play symbol white on amber unless it is a fixed black image. Folded on its side with the camera on the left and
+   the keyboard up, Prompt and Done go behind a "..." button. Where there is no side bar (iPhone, iPad, open tall) nothing
+   changes, checked pixel for pixel. Screenshots in `.inbox/duo/bar-spike/`.
+3. Decided: with Landscape only on, a fold keeps the text's direction; the folded default text size is 72 pt; the iPad idiom
+   exception in `LibraryLayout` stays; the two prompter text fixes apply on every device; the cursor keeping its place when
+   the Mac syncs is fine.
+4. **Unfolding a landscape cover take.** The inner screen ignored the lock once (measured on a simulator held upright). The
+   fold walk shows the text and the line are right after every unfold; whether the text ever turns a quarter turn on a real
+   Duo is still to see on a device.
+5. **The cursor in the title field.** The script text keeps its cursor across a fold; the title field's cursor goes to the end.
    Fixing it needs `TextField(text:selection:)` and the same offsets.
-8. **Prompter settings on the open screen.** It is the centred form sheet, as on the iPad, and was not measured after the
-   change. A popover at the top right would land in the status area (867,0 84x120), so a different anchor would be a design
-   change.
-9. **Countdown digit near a fold.** It moves to the middle of the free side. Say if the smallest possible shift is preferred.
-10. **Empty library with the Duo held tall and partly folded.** Done: while the fold is active the message and buttons sit
+6. **Prompter settings on the open screen.** It is the centred form sheet, as on the iPad; tonight's shots show it clear of
+   the fold in Book and readable open and tall. A popover at the top right would land in the status area (867,0 84x120), so a
+   different anchor would be a design change.
+7. **Countdown digit near a fold.** It moves to the middle of the free side. Say if the smallest possible shift is preferred.
+8. **Empty library with the Duo held tall and partly folded.** Done: while the fold is active the message and buttons sit
     about 122 pt lower, below the fold, and come back when the Duo lies flat. Checked on the Duo simulator both ways round
     (folded after the empty library showed, and turned tall while already folded).
-11. **Maestro on the cover.** The prompter's close and Done buttons and the settings popover have no ids Maestro can reach, and
+9. **Maestro on the cover.** The prompter's close and Done buttons and the settings popover have no ids Maestro can reach, and
     the cover's back chevron has no "Scripts" label. All five cover flows pass now: the back button is tapped by its id, and
     close, Done and the popover by hand-converted points. Ids for those would remove the points (an app change).
