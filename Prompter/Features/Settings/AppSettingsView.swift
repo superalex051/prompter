@@ -15,11 +15,17 @@ struct AppSettingsView: View {
         case sync
     }
 
-    @State private var path: [Page]
+    @State private var path: [Page] = []
+    /// Push Sync with Mac once the sheet is up (see `init`); used up by the first push.
+    @State private var opensSyncOnAppear: Bool
 
     /// `opensSync`: open straight on Sync with Mac (the `-route syncSettings` launch route).
+    ///
+    /// The page is pushed once the sheet is on screen, the way a tap on the row pushes it, not set as the starting path.
+    /// A starting path laid the page out before the sheet had its size (at the cover screen's 466 pt on the iPhone Duo),
+    /// and on the open Duo held wide its list then kept no right margin: the cards ran to the sheet's right edge.
     init(opensSync: Bool = false) {
-        _path = State(initialValue: opensSync ? [.sync] : [])
+        _opensSyncOnAppear = State(initialValue: opensSync)
     }
 
     var body: some View {
@@ -52,6 +58,11 @@ struct AppSettingsView: View {
             } message: {
                 Text("Text, mirror, countdown and scrolling go back to their defaults. Your scripts are not changed.")
             }
+        }
+        .onAppear {
+            guard opensSyncOnAppear else { return }
+            opensSyncOnAppear = false
+            path = [.sync]
         }
     }
 
