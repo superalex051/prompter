@@ -776,6 +776,12 @@ Hub's posture buttons need Accessibility, which sees no window on a locked scree
   Island on an iPhone). The reading line and the controls stay clear. Left as is.
 - The Duo simulator's PosterBoard (the Lock Screen's wallpaper service) began crashing on every boot during these runs;
   `simctl erase` on the Duo simulator cleared it.
+- On the final code (after the Sync fix): `CONFIG=Release scripts/build.sh` green, `scripts/test.sh` green on the iPhone
+  simulator, Maestro `settings` and `library` on the iPhone 2 of 2. The earlier final verify (before that fix): 850 of 850
+  unit tests on the iPhone (iOS 27.0) and Duo (iOS 27.1) simulators, Mac 319 of 319, iPhone flows 6 of 6, iPad and Pro Max
+  3 of 3, Duo cover flows 5 of 5. The counts in the integration block above are from the morning run.
+- Not exercised: a finger tap into Sync with Mac on the open display (Maestro only sees the cover), `scripts/sync-e2e.sh`,
+  and anything on a real Duo.
 
 ### Needs the owner (iPhone Duo)
 1. **Merge `duo/optimize` into `launch`.** Everything above passed. Pushing is a separate OK.
