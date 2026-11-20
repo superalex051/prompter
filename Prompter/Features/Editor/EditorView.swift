@@ -171,6 +171,8 @@ private struct EditorContent: View {
     /// The cursor in the script text, kept for a layout switch (see `EditorKeyboard`).
     @State private var bodySelection: TextSelection?
     @State private var didAutofocus = false
+    /// The software keyboard is on screen (a focused field with a hardware keyboard leaves it away).
+    @State private var keyboardShows = false
     @FocusState private var focus: Field?
 
     /// Text on screen lines up with the title field: `TextEditor` already insets its text by about 5 pt.
@@ -252,12 +254,23 @@ private struct EditorContent: View {
         .onChange(of: bodySelection) { _, selection in reportSelection(selection) }
         // A new version from the Mac (sync) replaces the drafts, so the next keystroke doesn't save over it.
         .onChange(of: store.remoteChange) { _, change in adoptRemoteChange(change) }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+            let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+            keyboardShows = EditorSideBar.isSoftwareKeyboard(height: frame?.height ?? 0)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardShows = false
+        }
         // Where iOS draws the bar down the side of the screen (the iPhone Duo folded, or open and held wide), Prompt and
         // Done go into it as round buttons. Everywhere else the bar is the one at the top, as it always was.
         .toolbar(readingVerticalEdge: { verticalEdge in
             if verticalEdge != nil {
                 if #available(iOS 27.1, *) {
-                    sideBarItems(wordCount: stats.wordCount, isTyping: isTyping)
+                    sideBarItems(
+                        wordCount: stats.wordCount,
+                        isTyping: isTyping,
+                        glyph: EditorSideBar.promptGlyph(edge: verticalEdge, keyboardShows: keyboardShows)
+                    )
                 }
             } else {
                 // Done lives in the navigation bar while the keyboard is up. A keyboard-toolbar Done floats above the keys
@@ -312,10 +325,11 @@ private struct EditorContent: View {
     /// Prompt and Done in the bar down the side of the screen: Prompt right under Back, an amber circle with a black play
     /// symbol, and Done (a tick) below it while typing, so Prompt never moves. Only items with both a symbol and a title
     /// (a `Label`) go into that bar, and it draws a prominent button's symbol white whatever the style says; a symbol
-    /// image in its own colour stays black. The titles are what VoiceOver reads.
+    /// image in its own colour stays black. The titles are what VoiceOver reads. When the two are expected to sit in the
+    /// bar's "..." menu (see `EditorSideBar`), Prompt gets the plain symbol, which the dark menu draws white.
     @available(iOS 27.1, *)
     @ToolbarContentBuilder
-    private func sideBarItems(wordCount: Int, isTyping: Bool) -> some ToolbarContent {
+    private func sideBarItems(wordCount: Int, isTyping: Bool, glyph: EditorSideBar.PromptGlyph) -> some ToolbarContent {
         ToolbarItem(placement: .topBarPinnedTrailing) {
             Button {
                 focus = nil
@@ -324,8 +338,12 @@ private struct EditorContent: View {
                 Label {
                     Text("Prompt")
                 } icon: {
-                    let play = UIImage(systemName: "play.fill") ?? UIImage()
-                    Image(uiImage: play.withTintColor(.black, renderingMode: .alwaysOriginal))
+                    if glyph == .inMenu {
+                        Image(systemName: "play.fill")
+                    } else {
+                        let play = UIImage(systemName: "play.fill") ?? UIImage()
+                        Image(uiImage: play.withTintColor(.black, renderingMode: .alwaysOriginal))
+                    }
                 }
             }
             .buttonStyle(.borderedProminent)
@@ -428,6 +446,28 @@ private struct VerticalEdgeToolbar<Items: ToolbarContent>: ViewModifier {
         } else {
             content.toolbar { items(nil) }
         }
+    }
+}
+
+/// Which play symbol the side bar's Prompt button gets.
+enum EditorSideBar {
+    enum PromptGlyph: Equatable {
+        /// Black, drawn on the amber button in the bar.
+        case onAmber
+        /// The plain symbol, for the bar's "..." menu: a black one is lost on the dark menu.
+        case inMenu
+    }
+
+    /// Folded with the camera on the left, the bar sits on the leading edge and starts lower. With the software keyboard
+    /// up it has room for Back and one more button, so iOS folds Prompt and Done into a "..." menu. No API says when that
+    /// happens, so this is where it was seen on the iPhone Duo.
+    static func promptGlyph(edge: HorizontalEdge?, keyboardShows: Bool) -> PromptGlyph {
+        edge == .leading && keyboardShows ? .inMenu : .onAmber
+    }
+
+    /// A keyboard frame this tall is the software keyboard; a hardware keyboard shows only a short bar of suggestions.
+    static func isSoftwareKeyboard(height: CGFloat) -> Bool {
+        height >= 150
     }
 }
 
