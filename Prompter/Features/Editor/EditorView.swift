@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The writing screen: a title field, a full-height script editor, a live word count and read time,
 /// and a Prompt button. Every change is saved straight away through `ScriptStore`.
@@ -191,6 +192,7 @@ private struct EditorContent: View {
 
     var body: some View {
         let stats = ReadingStats(text: bodyText, markdown: settingsStore.settings.markdown)
+        let isTyping = focus != nil
 
         VStack(spacing: 0) {
             // The default placeholder is too faint on black. An explicit colour: the hierarchical `.secondary` style
@@ -250,27 +252,35 @@ private struct EditorContent: View {
         .onChange(of: bodySelection) { _, selection in reportSelection(selection) }
         // A new version from the Mac (sync) replaces the drafts, so the next keystroke doesn't save over it.
         .onChange(of: store.remoteChange) { _, change in adoptRemoteChange(change) }
-        .toolbar {
-            // Done lives in the navigation bar while the keyboard is up. A keyboard-toolbar Done floats above the keys
-            // and ran into the word-count footer sitting on top of the keyboard.
-            if focus != nil {
+        // Where iOS draws the bar down the side of the screen (the iPhone Duo folded, or open and held wide), Prompt and
+        // Done go into it as round buttons. Everywhere else the bar is the one at the top, as it always was.
+        .toolbar(readingVerticalEdge: { verticalEdge in
+            if verticalEdge != nil {
+                if #available(iOS 27.1, *) {
+                    sideBarItems(wordCount: stats.wordCount, isTyping: isTyping)
+                }
+            } else {
+                // Done lives in the navigation bar while the keyboard is up. A keyboard-toolbar Done floats above the keys
+                // and ran into the word-count footer sitting on top of the keyboard.
+                if isTyping {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { focus = nil }
+                            .fontWeight(.semibold)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { focus = nil }
-                        .fontWeight(.semibold)
+                    Button {
+                        focus = nil
+                        onPrompt(scriptID)
+                    } label: {
+                        PromptButtonLabel()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(stats.wordCount == 0)
+                    .accessibilityHint(stats.wordCount == 0 ? "Add some text first" : "")
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    focus = nil
-                    onPrompt(scriptID)
-                } label: {
-                    PromptButtonLabel()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(stats.wordCount == 0)
-                .accessibilityHint(stats.wordCount == 0 ? "Add some text first" : "")
-            }
-        }
+        })
         .task {
             // A brand-new script opens ready to type, and an editor rebuilt by a layout switch (the iPhone Duo folding or
             // unfolding) types where the old one did. The short pause lets the push animation settle, because focus set
@@ -295,6 +305,40 @@ private struct EditorContent: View {
                         + "cursor \(handoff.selection.map { "\($0)" } ?? "none")"
                 )
                 takeKeyboard(handoff)
+            }
+        }
+    }
+
+    /// Prompt and Done in the bar down the side of the screen: Prompt right under Back, an amber circle with a black play
+    /// symbol, and Done (a tick) below it while typing, so Prompt never moves. Only items with both a symbol and a title
+    /// (a `Label`) go into that bar, and it draws a prominent button's symbol white whatever the style says; a symbol
+    /// image in its own colour stays black. The titles are what VoiceOver reads.
+    @available(iOS 27.1, *)
+    @ToolbarContentBuilder
+    private func sideBarItems(wordCount: Int, isTyping: Bool) -> some ToolbarContent {
+        ToolbarItem(placement: .topBarPinnedTrailing) {
+            Button {
+                focus = nil
+                onPrompt(scriptID)
+            } label: {
+                Label {
+                    Text("Prompt")
+                } icon: {
+                    let play = UIImage(systemName: "play.fill") ?? UIImage()
+                    Image(uiImage: play.withTintColor(.black, renderingMode: .alwaysOriginal))
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(wordCount == 0)
+            .accessibilityHint(wordCount == 0 ? "Add some text first" : "")
+        }
+        if isTyping {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    focus = nil
+                } label: {
+                    Label("Done", systemImage: "checkmark")
+                }
             }
         }
     }
@@ -360,6 +404,42 @@ private struct EditorContent: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .background(.bar)
+    }
+}
+
+private extension View {
+    /// `toolbar(content:)`, with `items` told where iOS draws the bar: `toolbarVerticalEdge`, the side of the screen when
+    /// the bar runs down it (iOS 27.1 and later: the iPhone Duo folded, or open and held wide), nil when it runs along the
+    /// top, and always nil before iOS 27.1. It is read in the same pass that builds the items, so the first frame already
+    /// has the right ones.
+    func toolbar<Items: ToolbarContent>(
+        @ToolbarContentBuilder readingVerticalEdge items: @escaping (HorizontalEdge?) -> Items
+    ) -> some View {
+        modifier(VerticalEdgeToolbar(items: items))
+    }
+}
+
+private struct VerticalEdgeToolbar<Items: ToolbarContent>: ViewModifier {
+    let items: (HorizontalEdge?) -> Items
+
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.modifier(VerticalEdgeReader(items: items))
+        } else {
+            content.toolbar { items(nil) }
+        }
+    }
+}
+
+/// Reads `toolbarVerticalEdge`, which exists from iOS 27.1 (a stored environment property can't be marked available in
+/// a type that runs on iOS 26).
+@available(iOS 27.1, *)
+private struct VerticalEdgeReader<Items: ToolbarContent>: ViewModifier {
+    @Environment(\.toolbarVerticalEdge) private var verticalEdge
+    let items: (HorizontalEdge?) -> Items
+
+    func body(content: Content) -> some View {
+        content.toolbar { items(verticalEdge) }
     }
 }
 
