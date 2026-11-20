@@ -784,7 +784,7 @@ Hub's posture buttons need Accessibility, which sees no window on a locked scree
   and anything on a real Duo.
 
 ### Needs the owner (iPhone Duo)
-1. **Merge `duo/optimize` into `launch`.** Everything above passed. Pushing is a separate OK.
+1. **Merge `duo/optimize` into `launch`.** Done 2026-11-20 at the owner's word, and `launch` pushed so a real Duo can test it.
 2. **Editor bar on the folded Duo: pick.** A throwaway spike (branch `duo/bar-spike`, never merged) rendered the options on
    the simulator. Giving Done and Prompt a symbol and a title moves them into the side bar under Back, the top strip goes and
    the title moves from 95 pt to 37 pt (about 2 more lines; folded on its side while typing, 3 lines instead of 1.5). iOS

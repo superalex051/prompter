@@ -63,7 +63,7 @@ the camera. No accounts, no subscription, no ads, no analytics, and nothing leav
 
 | What | Version |
 | --- | --- |
-| A Mac with **Xcode 27** or later | Use a release Xcode, not a beta, if you want TestFlight |
+| A Mac with **Xcode 27.1** or later | It needs the iOS 27.1 SDK (iPhone Duo). Use a release Xcode, not a beta, if you want TestFlight |
 | [XcodeGen](https://github.com/yonaskolb/XcodeGen) | `brew install xcodegen`. It generates the Xcode project from `project.yml` |
 | iPhone or iPad | iOS / iPadOS 26 or later |
 | Apple Watch (optional) | watchOS 10 or later, paired with the iPhone |
