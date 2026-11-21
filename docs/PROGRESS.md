@@ -783,9 +783,34 @@ Hub's posture buttons need Accessibility, which sees no window on a locked scree
 - Not exercised: a finger tap into Sync with Mac on the open display (Maestro only sees the cover), `scripts/sync-e2e.sh`,
   and anything on a real Duo.
 
+**Editor side bar (2026-11-20, branch `duo/editor-bar`, the owner's pick).** Where iOS 27.1 draws a toolbar down the side
+of the screen (the Duo folded in every posture, or open and held wide), the editor's Prompt and Done move into it as round
+buttons: Prompt is an amber circle with a black play symbol right under Back, and Done (a tick) sits below it while typing,
+so Prompt never moves. The top strip goes and the title moves up. Where `toolbarVerticalEdge` is nil (iPhone, iPad, the Duo
+open and held tall) the bar is the one at the top, as before. Folded with the camera on the left and the keyboard up, the bar
+fits Back and one more button, so iOS puts Prompt and Done behind a "..." button; there Prompt gets the plain play symbol,
+which the dark menu draws white (a black one was 1.3:1 against the menu). `visibilityPriority` can't keep Prompt in the bar
+in that posture. Unit tests: `EditorSideBarTests`.
+- Checked on the final code, each against the approved spike shots or `launch` a9a959c: build and `scripts/test.sh` green;
+  folded upright, camera left and camera right after real Device Hub turns, and open held wide, pixel-identical to the
+  approved shots; the "..." menu after a real turn (white play 14.9:1, both items work, Prompt disabled for an empty script);
+  a new empty script gives a grey, disabled Prompt; 9 screen recordings of the editor opening show no frame of the old top
+  strip; fold, unfold and four turns while typing log the same focus handoffs as a9a959c and keep the text; iPhone and iPad
+  (iOS 27.0) and the Duo open and held tall (iOS 27.1) pixel-identical to a9a959c; Partially Open puts the bar on the
+  trailing edge held wide and none held tall; Maestro editor flows pass on iPhone, iPad and the folded Duo; VoiceOver labels
+  "Prompt" and "Done". An independent code review found nothing.
+- Not exercised: a plain iPhone on iOS 27.1 or later (the iOS 27.1 simulator runtime only runs the Duo), the "Add some text
+  first" hint in the running app (checked in the code; Maestro can't read hints), and anything on a real Duo.
+- Same on a9a959c, so not from this change: after folding back to the cover while typing, focus is handed over (Done shows,
+  the cursor stays) but the simulator's software keyboard does not come back and new typing does not land. To check on a
+  real Duo.
+- Device Hub's posture buttons are now Closed, Partially Open, Open and Rotate Right (no Book), so `scripts/duo-posture.sh`
+  needs its Book posture renamed. Device Hub's presses also fail while the display sleeps, so runs keep it awake.
+
 ### Needs the owner (iPhone Duo)
 1. **Merge `duo/optimize` into `launch`.** Done 2026-11-20 at the owner's word, and `launch` pushed so a real Duo can test it.
-2. **Editor bar on the folded Duo: pick.** A throwaway spike (branch `duo/bar-spike`, never merged) rendered the options on
+2. **Editor bar on the folded Duo.** Done 2026-11-20: the owner picked Prompt and Done as round buttons in the side bar
+   (see "Editor side bar" above), merged into `launch`. Before that, a throwaway spike (branch `duo/bar-spike`, never merged) rendered the options on
    the simulator. Giving Done and Prompt a symbol and a title moves them into the side bar under Back, the top strip goes and
    the title moves from 95 pt to 37 pt (about 2 more lines; folded on its side while typing, 3 lines instead of 1.5). iOS
    draws the play symbol white on amber unless it is a fixed black image. Folded on its side with the camera on the left and
